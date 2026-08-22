@@ -1,10 +1,152 @@
-{
-  "version": "v1 – Standard 2026",
-  "firma": "Mustermann & Partner Rechtsanwälte",
-  "farbe": "#1F3864",
-  "webseite": "www.kanzlei-beispiel.de",
-  "banner_aktiv": true,
-  "banner_titel": "Steuerforum Frankfurt 2026",
-  "banner_text": "Jetzt anmelden – 15. Oktober",
-  "hinweis": "Zentral verwaltet mit SIGNOVA – Ihre E-Mails verlassen nie Ihren Tenant."
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIGNOVA Vorlagen-Editor v0.1</title>
+<style>
+:root{--navy:#132A4A;--blue:#2E6BD6;--ink:#1c2430;--slate:#5a6b80;--line:#dde4ec;--bg:#f4f6f9;--ok:#1e7a46;--okbg:#e7f4ec}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+header{background:var(--navy);color:#fff;padding:14px 22px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header b{letter-spacing:2px;font-size:17px}
+header span{color:#8fa3c0;font-size:12.5px}
+.wrap{display:grid;grid-template-columns:380px 1fr;gap:20px;padding:20px;max-width:1150px;margin:0 auto}
+@media(max-width:820px){.wrap{grid-template-columns:1fr}}
+.panel{background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 3px rgba(19,42,74,.08)}
+.panel h3{font-size:13px;color:var(--navy);padding:12px 16px;border-bottom:1px solid var(--line)}
+.pad{padding:14px 16px}
+label{display:block;font-size:12px;color:var(--slate);margin:12px 0 4px}
+label:first-child{margin-top:0}
+input[type=text],textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:6px;font-size:13.5px;font-family:inherit}
+input:focus,textarea:focus{outline:2px solid var(--blue);border-color:var(--blue)}
+.rowline{display:flex;gap:10px;align-items:center}
+input[type=color]{width:44px;height:36px;border:1px solid var(--line);border-radius:6px;padding:2px;cursor:pointer;background:#fff}
+.switch{display:flex;align-items:center;gap:10px;margin-top:14px;cursor:pointer;user-select:none}
+.switch input{width:18px;height:18px;accent-color:var(--blue)}
+.sigbox{padding:24px;min-height:230px}
+.sigbox.dark{background:#20242b;border-radius:0 0 10px 10px}
+.ptabs{display:flex;gap:6px;padding:10px 16px 0}
+.ptabs span{font-size:12px;padding:5px 12px;border:1px solid var(--line);border-bottom:0;border-radius:6px 6px 0 0;background:#eef1f5;cursor:pointer;color:var(--slate)}
+.ptabs span.sel{background:#fff;color:var(--navy);font-weight:600}
+.jsonbox{background:#0f1a2b;color:#c9e0ff;font-family:Consolas,monospace;font-size:12px;padding:14px 16px;border-radius:0 0 10px 10px;white-space:pre-wrap;word-break:break-all;min-height:150px}
+.btn{display:inline-block;padding:9px 18px;background:var(--blue);color:#fff;border:0;border-radius:6px;font-size:13.5px;font-weight:600;cursor:pointer}
+.btn:hover{background:#2559b4}
+.steps{font-size:12.5px;color:var(--slate);line-height:1.9;padding:12px 16px}
+.steps b{color:var(--navy)}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;opacity:0;transition:.3s;pointer-events:none}
+.toast.on{opacity:1}
+.note{margin:0 20px 20px;max-width:1110px;background:#f2f7ff;border:1px solid #cfe0f7;border-radius:8px;padding:11px 14px;font-size:12.5px;color:#2a4d80}
+@media(min-width:821px){.note{margin:0 auto 20px}}
+</style>
+</head>
+<body>
+
+<header><b>SIGNOVA</b><span>Vorlagen-Editor v0.1 · funktionierendes Werkzeug – erzeugt die zentrale Vorlage für dein Add-in</span></header>
+
+<div class="wrap">
+
+  <!-- FORM -->
+  <div class="panel">
+    <h3>Vorlage bearbeiten</h3>
+    <div class="pad">
+      <label>Firmenname</label>
+      <input type="text" id="firma" value="Mustermann & Partner Rechtsanwälte">
+      <label>Webseite</label>
+      <input type="text" id="webseite" value="www.kanzlei-beispiel.de">
+      <label>Firmenfarbe</label>
+      <div class="rowline">
+        <input type="color" id="farbe" value="#1F3864">
+        <input type="text" id="farbeTxt" value="#1F3864" style="width:110px">
+      </div>
+      <label class="switch"><input type="checkbox" id="bannerAktiv" checked> <b style="color:var(--ink)">Banner anzeigen</b></label>
+      <label>Banner – Überschrift</label>
+      <input type="text" id="bannerTitel" value="Steuerforum Frankfurt 2026">
+      <label>Banner – Text</label>
+      <input type="text" id="bannerText" value="Jetzt anmelden – 15. Oktober">
+      <label>Fußzeile</label>
+      <input type="text" id="hinweis" value="Zentral verwaltet mit SIGNOVA – Ihre E-Mails verlassen nie Ihren Tenant.">
+      <label>Versions-Bezeichnung</label>
+      <input type="text" id="version" value="v2 – bearbeitet im Editor">
+    </div>
+  </div>
+
+  <!-- PREVIEW + JSON -->
+  <div>
+    <div class="panel" style="margin-bottom:18px">
+      <div class="ptabs">
+        <span class="sel" onclick="mode(this,'light')">Hell</span>
+        <span onclick="mode(this,'dark')">Dunkelmodus</span>
+        <span style="margin-left:auto;border:0;background:none;cursor:default;color:var(--slate)">Vorschau als: Anna Bergmann</span>
+      </div>
+      <div class="sigbox" id="sigbox"></div>
+    </div>
+    <div class="panel">
+      <h3>Deine fertige Vorlage (template.json) &nbsp; <button class="btn" style="float:right;margin-top:-6px" onclick="copyJson()">Kopieren</button></h3>
+      <div class="jsonbox" id="jsonbox"></div>
+      <div class="steps">
+        <b>So wird sie live:</b> 1 · „Kopieren" klicken → 2 · GitHub: <b>signova-spike → template.json → ✏️ bearbeiten</b> → 3 · alles ersetzen, einfügen, <b>Commit</b> → 4 · 2 Min. warten → 5 · in Outlook „Signatur jetzt einfügen" → neue Signatur ist da. 🎉
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">💡 <b>So funktioniert SIGNOVA im Kleinen:</b> Dieser Editor = später dein Admin-Dashboard. GitHub = später dein SIGNOVA-Server (dann entfällt das Kopieren – Knopf „Veröffentlichen" macht alles automatisch). Das Add-in in Outlook bleibt dasselbe.</div>
+
+<div class="toast" id="toast">In Zwischenablage kopiert ✔</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fields=["firma","webseite","farbe","farbeTxt","bannerAktiv","bannerTitel","bannerText","hinweis","version"];
+let dark=false;
+
+function tpl(){
+  return {
+    version:$("version").value,
+    firma:$("firma").value,
+    farbe:$("farbe").value,
+    webseite:$("webseite").value,
+    banner_aktiv:$("bannerAktiv").checked,
+    banner_titel:$("bannerTitel").value,
+    banner_text:$("bannerText").value,
+    hinweis:$("hinweis").value
+  };
 }
+
+function render(){
+  const t=tpl();
+  const name="Anna Bergmann", mail="a.bergmann@kanzlei-beispiel.de";
+  const fg=dark?"#e6e6e6":"#222", mut=dark?"#9aa7b8":"#595959";
+  let h='<div style="font-family:Segoe UI,Arial,sans-serif;font-size:13.5px;color:'+fg+';line-height:1.6;max-width:430px">'+
+    '<strong style="font-size:15px;color:'+(dark?'#9cc0f5':t.farbe)+'">'+name+'</strong><br>'+
+    '<span style="color:'+mut+'">'+esc(t.firma)+'</span>'+
+    '<div style="height:2.5px;width:180px;background:'+(dark?'#7fa7e8':t.farbe)+';margin:8px 0;border-radius:2px"></div>'+
+    'E-Mail: <a style="color:'+(dark?'#9cc0f5':t.farbe)+'">'+mail+'</a>'+(t.webseite?'<br>'+esc(t.webseite):'');
+  if(t.banner_aktiv){
+    h+='<div style="margin-top:10px;background:'+t.farbe+';color:#fff;border-radius:6px;padding:11px 14px;font-size:12.5px">'+
+       '<b>'+esc(t.banner_titel)+'</b><br>'+esc(t.banner_text)+'</div>';
+  }
+  h+='<div style="margin-top:9px;font-size:10.5px;color:'+mut+'">'+esc(t.hinweis)+' &nbsp;(Vorlage: '+esc(t.version)+')</div></div>';
+  $("sigbox").innerHTML=h;
+  $("jsonbox").textContent=JSON.stringify(t,null,2);
+}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+function mode(el,m){
+  dark=(m==='dark');
+  document.querySelectorAll('.ptabs span').forEach(s=>s.classList.remove('sel'));
+  el.classList.add('sel');
+  $("sigbox").classList.toggle('dark',dark);
+  render();
+}
+function copyJson(){
+  navigator.clipboard.writeText($("jsonbox").textContent).then(()=>{
+    const t=$("toast");t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1800);
+  });
+}
+$("farbe").addEventListener("input",()=>{$("farbeTxt").value=$("farbe").value;render()});
+$("farbeTxt").addEventListener("input",()=>{if(/^#[0-9a-fA-F]{6}$/.test($("farbeTxt").value)){$("farbe").value=$("farbeTxt").value;render()}});
+fields.forEach(f=>$(f).addEventListener("input",render));
+render();
+</script>
+</body>
+</html>
