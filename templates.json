@@ -1,0 +1,25 @@
+{
+  "hinweis_fuer_admin": "Mehrere Vorlagen. Welche Person welche Vorlage bekommt, steht in users.json im Feld 'vorlage'. Gibt es keine Zuweisung, gilt 'standard'.",
+  "vorlagen": {
+    "standard": {
+      "version": "Standard v3",
+      "firma": "Mustermann & Partner Rechtsanwälte",
+      "farbe": "#1F3864",
+      "webseite": "www.kanzlei-beispiel.de",
+      "banner_aktiv": true,
+      "banner_titel": "Steuerforum Frankfurt 2026",
+      "banner_text": "Jetzt anmelden – 15. Oktober",
+      "hinweis": "Zentral verwaltet mit SIGNOVA – Ihre E-Mails verlassen nie Ihren Tenant."
+    },
+    "geschaeftsfuehrung": {
+      "version": "Geschäftsführung v1",
+      "firma": "Mustermann & Partner Rechtsanwälte · Geschäftsführung",
+      "farbe": "#4A2A0E",
+      "webseite": "www.kanzlei-beispiel.de",
+      "banner_aktiv": false,
+      "banner_titel": "",
+      "banner_text": "",
+      "hinweis": "Diese Nachricht ist vertraulich und nur für den Adressaten bestimmt."
+    }
+  }
+}

@@ -1,19 +1,21 @@
 {
-  "hinweis_fuer_admin": "Diese Datei spielt Entra ID. E-Mail-Adresse klein schreiben. Leere Felder ('') blenden die Zeile in der Signatur aus.",
+  "hinweis_fuer_admin": "Diese Datei spielt Entra ID. 'vorlage' bestimmt, welche Vorlage aus templates.json die Person bekommt (standard / geschaeftsfuehrung). Leere Felder ('') blenden die Zeile aus.",
   "benutzer": [
     {
       "email": "mostafaamin@outlook.de",
       "titel": "IT-Verantwortlicher",
       "abteilung": "IT & Digitalisierung",
-      "telefon": "+49 69 1234-999",
-      "mobil": ""
+      "telefon": "+49 69 1234-100",
+      "mobil": "+49 171 234567",
+      "vorlage": "standard"
     },
     {
       "email": "a.bergmann@kanzlei-beispiel.de",
       "titel": "Rechtsanwältin · Fachanwältin für Steuerrecht",
       "abteilung": "Steuerrecht",
       "telefon": "+49 69 1234-521",
-      "mobil": ""
+      "mobil": "",
+      "vorlage": "standard"
     }
   ]
 }

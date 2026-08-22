@@ -1,5 +1,5 @@
-/* SIGNOVA Spike v0.3 – Vorlage (template.json) + zentrale Benutzerdaten (users.json = simuliertes Entra ID)
-   Neu: Titel, Abteilung, Telefon/Mobil pro Person aus zentraler Liste; leere Felder blenden die Zeile aus. */
+/* SIGNOVA Spike v0.4 – Mehrere Vorlagen (templates.json) + Zuweisung pro Person (users.json)
+   Die Mini-"Rules Engine": users.json -> Feld 'vorlage' bestimmt die Vorlage; ohne Zuweisung gilt 'standard'. */
 
 var SIGNOVA_BASE = "https://uvaree.github.io/signova-spike/";
 
@@ -25,14 +25,19 @@ function signovaFindUser(users, email) {
   return null;
 }
 
-function signovaBuildHtml(tpl, profile, person) {
+function signovaPickTemplate(templates, person) {
+  if (!templates || !templates.vorlagen) return null;
+  var wunsch = person && person.vorlage ? person.vorlage : "standard";
+  return templates.vorlagen[wunsch] || templates.vorlagen["standard"] || null;
+}
+
+function signovaBuildHtml(tpl, profile, person, vorlagenName) {
   var farbe = tpl.farbe || "#1F3864";
   var titel = person && person.titel ? person.titel : "";
   var abteilung = person && person.abteilung ? person.abteilung : "";
   var telefon = person && person.telefon ? person.telefon : "";
   var mobil = person && person.mobil ? person.mobil : "";
 
-  var untertitel = titel;                                 /* Conditional: Zeile nur wenn vorhanden */
   var firmenzeile = (abteilung ? abteilung + " – " : "") + (tpl.firma || "");
   var telzeile = "";
   if (telefon) telzeile += "Tel. " + telefon;
@@ -41,7 +46,7 @@ function signovaBuildHtml(tpl, profile, person) {
   var html =
     '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222;">' +
     '<tr><td style="padding-bottom:6px;"><strong style="font-size:11pt; color:' + farbe + ';">' + profile.displayName + '</strong>' +
-    (untertitel ? '<br/><span style="color:#595959;">' + untertitel + '</span>' : '') +
+    (titel ? '<br/><span style="color:#595959;">' + titel + '</span>' : '') +
     '</td></tr>' +
     '<tr><td style="border-top:2px solid ' + farbe + '; padding-top:6px;">' +
     firmenzeile +
@@ -55,18 +60,22 @@ function signovaBuildHtml(tpl, profile, person) {
       '<strong>' + (tpl.banner_titel || "") + '</strong><br/>' + (tpl.banner_text || "") + '</td></tr></table></td></tr>';
   }
   html += '<tr><td style="padding-top:8px; font-size:8pt; color:#8A8A8A;">' + (tpl.hinweis || "") +
-    ' &nbsp;(Vorlage: ' + (tpl.version || "?") + (person ? ' · Personendaten: zentral' : ' · Personendaten: nicht gefunden') + ')</td></tr></table>';
+    ' &nbsp;(' + (vorlagenName ? 'Vorlage: ' + vorlagenName + ' – ' : '') + (tpl.version || "?") +
+    (person ? ' · Personendaten: zentral' : ' · Personendaten: nicht gefunden') + ')</td></tr></table>';
   return html;
 }
 
 function signovaApply(done) {
   var item = Office.context.mailbox.item;
   var profile = Office.context.mailbox.userProfile;
-  signovaFetchJson("template.json", signovaFallbackTemplate(), function (tpl) {
+  signovaFetchJson("templates.json", null, function (templates) {
     signovaFetchJson("users.json", null, function (users) {
       var person = signovaFindUser(users, profile.emailAddress);
+      var tpl = signovaPickTemplate(templates, person);
+      var name = person && person.vorlage ? person.vorlage : "standard";
+      if (!tpl) { tpl = signovaFallbackTemplate(); name = ""; }   /* Notfall: alte/keine templates.json */
       item.body.setSignatureAsync(
-        signovaBuildHtml(tpl, profile, person),
+        signovaBuildHtml(tpl, profile, person, name),
         { coercionType: Office.CoercionType.Html },
         function (res) { done(res); }
       );
