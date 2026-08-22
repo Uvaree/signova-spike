@@ -7,7 +7,7 @@
       "abteilung": "IT & Digitalisierung",
       "telefon": "+49 69 1234-100",
       "mobil": "+49 171 234567",
-      "vorlage": "standard"
+      "vorlage": "geschaeftsfuehrung"
     },
     {
       "email": "a.bergmann@kanzlei-beispiel.de",
@@ -15,7 +15,7 @@
       "abteilung": "Steuerrecht",
       "telefon": "+49 69 1234-521",
       "mobil": "",
-      "vorlage": "geschaeftsfuehrung"
+      "vorlage": "standard"
     }
   ]
 }
