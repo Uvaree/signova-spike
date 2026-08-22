@@ -1,44 +1,58 @@
-/* SIGNOVA Signature Spike – Technik-Test
-   Setzt beim Verfassen einer neuen E-Mail automatisch eine Signatur.
-   Nutzt echte Benutzerdaten aus dem Postfach-Profil (Name, E-Mail).
-   Im späteren Produkt kommen jobTitle, Telefon usw. per Microsoft Graph aus Entra ID. */
+/* SIGNOVA Spike v0.2 – Signatur aus zentraler Vorlage (template.json auf GitHub Pages)
+   Automatik-Handler (aktiv bei Admin-Deployment) + gemeinsamer Baukasten fuer den Taskpane-Button. */
 
-function buildSignatureHtml(displayName, emailAddress) {
-  return (
-    '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222222;">' +
-    '<tr><td style="padding-bottom:6px;"><strong style="font-size:11pt; color:#1F3864;">' + displayName + '</strong><br/>' +
-    '<span style="color:#595959;">Pilotphase &ndash; zentral verwaltete Signatur</span></td></tr>' +
-    '<tr><td style="border-top:2px solid #1F3864; padding-top:6px;">' +
-    'E-Mail: <a href="mailto:' + emailAddress + '" style="color:#1F3864;">' + emailAddress + '</a><br/>' +
-    'Telefon: {{businessPhone}} &nbsp;|&nbsp; Mobil: {{mobilePhone}}<br/>' +
-    '<span style="color:#595959;">{{department}} &ndash; {{companyName}}</span>' +
-    '</td></tr>' +
-    '<tr><td style="padding-top:8px; font-size:8pt; color:#8A8A8A;">' +
-    'Diese Signatur wurde automatisch durch SIGNOVA gesetzt (Technik-Test). ' +
-    'Die {{Platzhalter}} werden im n&auml;chsten Schritt automatisch aus Entra ID bef&uuml;llt.' +
-    '</td></tr>' +
-    '</table>'
-  );
+var SIGNOVA_TEMPLATE_URL = "https://uvaree.github.io/signova-spike/template.json";
+
+function signovaFallbackTemplate() {
+  return { version: "fallback", firma: "SIGNOVA Pilot", farbe: "#1F3864", webseite: "",
+           banner_aktiv: false, banner_titel: "", banner_text: "",
+           hinweis: "Zentral verwaltet mit SIGNOVA." };
 }
 
-function onNewMessageComposeHandler(event) {
+function signovaFetchTemplate(callback) {
+  fetch(SIGNOVA_TEMPLATE_URL + "?v=" + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (tpl) { callback(tpl); })
+    .catch(function () { callback(signovaFallbackTemplate()); });
+}
+
+function signovaBuildHtml(tpl, profile) {
+  var farbe = tpl.farbe || "#1F3864";
+  var html =
+    '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222;">' +
+    '<tr><td style="padding-bottom:6px;"><strong style="font-size:11pt; color:' + farbe + ';">' + profile.displayName + '</strong><br/>' +
+    '<span style="color:#595959;">' + (tpl.firma || "") + '</span></td></tr>' +
+    '<tr><td style="border-top:2px solid ' + farbe + '; padding-top:6px;">' +
+    'E-Mail: <a href="mailto:' + profile.emailAddress + '" style="color:' + farbe + ';">' + profile.emailAddress + '</a>' +
+    (tpl.webseite ? '<br/>' + tpl.webseite : '') +
+    '</td></tr>';
+  if (tpl.banner_aktiv) {
+    html += '<tr><td style="padding-top:8px;"><table cellpadding="10" cellspacing="0" style="background:' + farbe +
+      '; border-radius:6px;"><tr><td style="color:#ffffff; font-family:Segoe UI, Arial, sans-serif; font-size:9.5pt;">' +
+      '<strong>' + (tpl.banner_titel || "") + '</strong><br/>' + (tpl.banner_text || "") + '</td></tr></table></td></tr>';
+  }
+  html += '<tr><td style="padding-top:8px; font-size:8pt; color:#8A8A8A;">' + (tpl.hinweis || "") +
+    ' &nbsp;(Vorlage: ' + (tpl.version || "?") + ')</td></tr></table>';
+  return html;
+}
+
+function signovaApply(done) {
   var item = Office.context.mailbox.item;
   var profile = Office.context.mailbox.userProfile;
-  var signatureHtml = buildSignatureHtml(profile.displayName, profile.emailAddress);
-
-  item.body.setSignatureAsync(
-    signatureHtml,
-    { coercionType: Office.CoercionType.Html },
-    function (asyncResult) {
-      if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-        console.error("SIGNOVA: Signatur konnte nicht gesetzt werden: " + JSON.stringify(asyncResult.error));
-      }
-      event.completed();
-    }
-  );
+  signovaFetchTemplate(function (tpl) {
+    item.body.setSignatureAsync(
+      signovaBuildHtml(tpl, profile),
+      { coercionType: Office.CoercionType.Html },
+      function (res) { done(res); }
+    );
+  });
 }
 
-// Registrierung des Handlers (erforderlich fuer Outlook Windows classic)
+/* Automatik: startet bei neuer Mail – erfordert Admin-Deployment (M365 Admin Center) */
+function onNewMessageComposeHandler(event) {
+  signovaApply(function () { event.completed(); });
+}
+
 if (typeof Office !== "undefined" && Office.actions) {
   Office.actions.associate("onNewMessageComposeHandler", onNewMessageComposeHandler);
 }

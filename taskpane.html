@@ -1,19 +1,48 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8"/>
-  <title>SIGNOVA</title>
-  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-  <style>
-    body { font-family: 'Segoe UI', Arial, sans-serif; margin: 16px; color: #222; }
-    h2 { color: #1F3864; }
-    .ok { color: #1a7f37; font-weight: bold; }
-  </style>
+<meta charset="UTF-8"/>
+<title>SIGNOVA</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<script src="launchevent.js"></script>
+<style>
+  body{font-family:'Segoe UI',Arial,sans-serif;margin:16px;color:#1c2430;font-size:13.5px}
+  h2{color:#1F3864;font-size:17px;letter-spacing:.5px}
+  .btn{display:block;width:100%;margin:14px 0 10px;padding:11px;background:#2E6BD6;color:#fff;border:0;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
+  .btn:disabled{background:#9db6dd}
+  .ok{color:#1e7a46;font-weight:600}
+  .err{color:#b23b3b}
+  .muted{color:#5a6b80;font-size:12px;line-height:1.6;margin-top:12px;border-top:1px solid #dde4ec;padding-top:10px}
+  code{background:#eef1f5;padding:1px 5px;border-radius:3px;font-size:12px}
+</style>
 </head>
 <body>
-  <h2>SIGNOVA Signature Spike</h2>
-  <p class="ok">✔ Add-in ist installiert und aktiv.</p>
-  <p>Schließe dieses Fenster und erstelle eine <strong>neue E-Mail</strong> – die Signatur wird automatisch eingefügt.</p>
-  <script>Office.onReady();</script>
+  <h2>SIGNOVA</h2>
+  <p>Die Vorlage kommt zentral von deinem GitHub. Ändere dort <code>template.json</code> – und die Signatur ändert sich hier.</p>
+  <button class="btn" id="go" disabled>Signatur jetzt einfügen</button>
+  <div id="status"></div>
+  <div class="muted">💡 Bei zentraler Verteilung über das Admin Center passiert das automatisch bei jeder neuen E-Mail – ganz ohne diesen Knopf.</div>
+<script>
+  Office.onReady(function(info){
+    var btn = document.getElementById('go');
+    var st = document.getElementById('status');
+    if (Office.context.mailbox && Office.context.mailbox.item && Office.context.mailbox.item.body && Office.context.mailbox.item.body.setSignatureAsync) {
+      btn.disabled = false;
+    } else {
+      st.innerHTML = '<p class="err">Bitte zuerst eine <b>neue E-Mail</b> öffnen und SIGNOVA dort im Schreibfenster starten.</p>';
+    }
+    btn.onclick = function(){
+      btn.disabled = true; st.textContent = 'Hole Vorlage von GitHub …';
+      signovaApply(function(res){
+        btn.disabled = false;
+        if (res.status === Office.AsyncResultStatus.Succeeded) {
+          st.innerHTML = '<p class="ok">✔ Signatur eingefügt – schau in deine E-Mail!</p>';
+        } else {
+          st.innerHTML = '<p class="err">Fehler: ' + JSON.stringify(res.error) + '</p>';
+        }
+      });
+    };
+  });
+</script>
 </body>
 </html>
