@@ -12,8 +12,8 @@ var SIGNOVA_TOKEN = "hkaVWOSgspki6qXdi2lVUqLtHb9cEzkJB6Tj8YVwtbY";
 
 function signovaFallbackTemplate() {
   return { version: "fallback", firma: "SIGNOVA Pilot", farbe: "#1F3864", webseite: "",
-           banner_aktiv: false, banner_titel: "", banner_text: "",
-           hinweis: "Zentral verwaltet mit SIGNOVA." };
+           logo_url: "", banner_aktiv: false, banner_titel: "", banner_text: "",
+           banner_image_url: "", hinweis: "Zentral verwaltet mit SIGNOVA." };
 }
 
 function signovaFetchJson(file, fallback, callback) {
@@ -48,6 +48,34 @@ function signovaPickTemplate(templates, person) {
   return templates.vorlagen[wunsch] || templates.vorlagen["standard"] || null;
 }
 
+/* Masse, an die sich Add-in UND Dashboard-Vorschau halten muessen.
+   Gegenstueck: LOGO_MAX_HEIGHT_PX / BANNER_MAX_WIDTH_PX in signova-app,
+   src/lib/signature.ts */
+var SIGNOVA_LOGO_MAX_HEIGHT = 40;
+var SIGNOVA_BANNER_MAX_WIDTH = 600;
+
+/* Outlook rendert nur absolute Bild-Adressen. Relative Angaben werden
+   deshalb gegen den Ursprung der SIGNOVA-API aufgeloest. */
+function signovaAbsoluteUrl(url) {
+  var wert = (url || "").trim();
+  if (!wert) return "";
+  if (/^(https?:)?\/\//i.test(wert) || /^data:/i.test(wert)) return wert;
+  try {
+    return new URL(wert, SIGNOVA_BASE).href;
+  } catch (e) {
+    return wert;
+  }
+}
+
+/* Minimales Escaping fuer Werte, die in Attribute geschrieben werden. */
+function signovaAttr(wert) {
+  return String(wert || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function signovaBuildHtml(tpl, profile, person, vorlagenName) {
   var farbe = tpl.farbe || "#1F3864";
   var titel = person && person.titel ? person.titel : "";
@@ -60,8 +88,20 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName) {
   if (telefon) telzeile += "Tel. " + telefon;
   if (mobil) telzeile += (telzeile ? " · " : "") + "Mobil " + mobil;
 
+  var logo = signovaAbsoluteUrl(tpl.logo_url);
+  var bannerBild = signovaAbsoluteUrl(tpl.banner_image_url);
+
   var html =
-    '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222;">' +
+    '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222;">';
+
+  /* Logo ueber dem Namen (Ausbaupaket 1) */
+  if (logo) {
+    html += '<tr><td style="padding-bottom:8px;">' +
+      '<img src="' + signovaAttr(logo) + '" alt="" style="max-height:' + SIGNOVA_LOGO_MAX_HEIGHT +
+      'px; max-width:100%; display:block; border:0;" /></td></tr>';
+  }
+
+  html +=
     '<tr><td style="padding-bottom:6px;"><strong style="font-size:11pt; color:' + farbe + ';">' + profile.displayName + '</strong>' +
     (titel ? '<br/><span style="color:#595959;">' + titel + '</span>' : '') +
     '</td></tr>' +
@@ -71,7 +111,13 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName) {
     '<br/>E-Mail: <a href="mailto:' + profile.emailAddress + '" style="color:' + farbe + ';">' + profile.emailAddress + '</a>' +
     (tpl.webseite ? ' · ' + tpl.webseite : '') +
     '</td></tr>';
-  if (tpl.banner_aktiv) {
+  /* Banner-Auswahl - identisch zu buildBanner() in signova-app/src/lib/signature.ts:
+     Banner aus -> nichts; Bild gesetzt -> Bild; sonst Text-Box, sofern gefuellt. */
+  if (tpl.banner_aktiv && bannerBild) {
+    html += '<tr><td style="padding-top:8px;">' +
+      '<img src="' + signovaAttr(bannerBild) + '" alt="" style="width:100%; max-width:' +
+      SIGNOVA_BANNER_MAX_WIDTH + 'px; height:auto; display:block; border:0;" /></td></tr>';
+  } else if (tpl.banner_aktiv && (tpl.banner_titel || tpl.banner_text)) {
     html += '<tr><td style="padding-top:8px;"><table cellpadding="10" cellspacing="0" style="background:' + farbe +
       '; border-radius:6px;"><tr><td style="color:#ffffff; font-family:Segoe UI, Arial, sans-serif; font-size:9.5pt;">' +
       '<strong>' + (tpl.banner_titel || "") + '</strong><br/>' + (tpl.banner_text || "") + '</td></tr></table></td></tr>';
