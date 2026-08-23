@@ -18,7 +18,7 @@
 </head>
 <body>
   <h2>SIGNOVA</h2>
-  <p>Die Vorlage kommt zentral von deinem GitHub. Ändere dort <code>template.json</code> – und die Signatur ändert sich hier.</p>
+  <p>Die Vorlage kommt live aus deiner SIGNOVA-Plattform. Ändere sie dort – und die Signatur ändert sich hier.</p>
   <button class="btn" id="go" disabled>Signatur jetzt einfügen</button>
   <div id="status"></div>
   <div class="muted">💡 Bei zentraler Verteilung über das Admin Center passiert das automatisch bei jeder neuen E-Mail – ganz ohne diesen Knopf.</div>
@@ -32,7 +32,7 @@
       st.innerHTML = '<p class="err">Bitte zuerst eine <b>neue E-Mail</b> öffnen und SIGNOVA dort im Schreibfenster starten.</p>';
     }
     btn.onclick = function(){
-      btn.disabled = true; st.textContent = 'Hole Vorlage von GitHub …';
+      btn.disabled = true; st.textContent = 'Hole Vorlage aus SIGNOVA …';
       signovaApply(function(res){
         btn.disabled = false;
         if (res.status === Office.AsyncResultStatus.Succeeded) {

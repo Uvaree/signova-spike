@@ -3,6 +3,13 @@
 
 var SIGNOVA_BASE = "https://signova-app-eta.vercel.app/api/addin/";
 
+/* Zugriffstoken fuer die SIGNOVA-API. Muss identisch mit der ENV-Variable
+   ADDIN_TOKEN im Vercel-Projekt sein, sonst antwortet die API mit 401.
+   Hinweis: Das ist Basisschutz, keine Authentifizierung - das Token steht
+   hier im Klartext. Vor dem Piloten mit echten Kanzleidaten wird es durch
+   Entra ID (Nested App Authentication) ersetzt. */
+var SIGNOVA_TOKEN = "hkaVWOSgspki6qXdi2lVUqLtHb9cEzkJB6Tj8YVwtbY";
+
 function signovaFallbackTemplate() {
   return { version: "fallback", firma: "SIGNOVA Pilot", farbe: "#1F3864", webseite: "",
            banner_aktiv: false, banner_titel: "", banner_text: "",
@@ -10,8 +17,18 @@ function signovaFallbackTemplate() {
 }
 
 function signovaFetchJson(file, fallback, callback) {
-  fetch(SIGNOVA_BASE + file + "?v=" + Date.now())
-    .then(function (r) { return r.json(); })
+  /* token = Zugriff, v = Cache-Buster (beides als Query-Parameter) */
+  var url = SIGNOVA_BASE + file +
+            "?token=" + encodeURIComponent(SIGNOVA_TOKEN) +
+            "&v=" + Date.now();
+  fetch(url)
+    .then(function (r) {
+      /* 401 = Token fehlt oder ist falsch. Ohne diese Pruefung wuerde die
+         Fehlerantwort als gueltiges JSON durchgehen und zu einer leeren
+         Signatur fuehren statt zum Fallback. */
+      if (!r.ok) throw new Error("SIGNOVA API " + r.status);
+      return r.json();
+    })
     .then(function (data) { callback(data); })
     .catch(function () { callback(fallback); });
 }
