@@ -1,7 +1,7 @@
 /* SIGNOVA Spike v0.4 – Mehrere Vorlagen (templates.json) + Zuweisung pro Person (users.json)
    Die Mini-"Rules Engine": users.json -> Feld 'vorlage' bestimmt die Vorlage; ohne Zuweisung gilt 'standard'. */
 
-var SIGNOVA_BASE = "https://uvaree.github.io/signova-spike/";
+var SIGNOVA_BASE = "https://signova-app-eta.vercel.app/api/addin/";
 
 function signovaFallbackTemplate() {
   return { version: "fallback", firma: "SIGNOVA Pilot", farbe: "#1F3864", webseite: "",
