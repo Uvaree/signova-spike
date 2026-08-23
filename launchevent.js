@@ -76,6 +76,71 @@ function signovaAttr(wert) {
     .replace(/>/g, "&gt;");
 }
 
+/* Mini-Template-Sprache fuer den HTML-Modus einer Vorlage.
+   Gegenstueck: renderHtmlTemplate() in signova-app/src/lib/html-template.ts.
+   Beide Seiten muessen zeichengenau dasselbe tun.
+
+     {{feld}}                 Platzhalter
+     {{#if feld}}...{{/if}}   Block entfaellt bei leerem Feld
+
+   Erst die Bloecke aufloesen, dann die Platzhalter ersetzen - andersherum
+   wuerde ein Wert, der zufaellig {{/if}} enthaelt, die Struktur zerstoeren. */
+function signovaRenderHtmlTemplate(html, kontext) {
+  var mitBloecken = String(html || "").replace(
+    /\{\{#if\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}([\s\S]*?)\{\{\/if\}\}/g,
+    function (treffer, feld, inhalt) {
+      var wert = kontext[feld];
+      return !wert || String(wert).trim() === "" ? "" : inhalt;
+    }
+  );
+
+  return mitBloecken.replace(
+    /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,
+    function (treffer, feld) {
+      var wert = kontext[feld];
+      /* Unbekannte Platzhalter bleiben stehen - so faellt ein Tippfehler auf,
+         statt stillschweigend zu verschwinden. */
+      if (wert === undefined) return treffer;
+      return signovaAttr(wert);
+    }
+  );
+}
+
+function signovaHtmlKontext(tpl, profile, person) {
+  return {
+    displayName: profile.displayName,
+    titel: person && person.titel ? person.titel : "",
+    abteilung: person && person.abteilung ? person.abteilung : "",
+    telefon: person && person.telefon ? person.telefon : "",
+    mobil: person && person.mobil ? person.mobil : "",
+    email: profile.emailAddress,
+    firma: tpl.firma || "",
+    webseite: tpl.webseite || "",
+    logo_url: signovaAbsoluteUrl(tpl.logo_url)
+  };
+}
+
+/* Banner einer laufenden Kampagne. Hat Vorrang vor dem Banner der Vorlage -
+   die Auswahl (Zeitraum, Zielgruppe) trifft der Server, hier kommt nur noch
+   ein fertiges Ergebnis an oder gar keins. */
+function signovaKampagnenBannerHtml(person, farbe) {
+  var k = person && person.kampagnen_banner ? person.kampagnen_banner : null;
+  if (!k) return "";
+
+  var bild = signovaAbsoluteUrl(k.image_url);
+  if (bild) {
+    return '<tr><td style="padding-top:8px;">' +
+      '<img src="' + signovaAttr(bild) + '" alt="" style="width:100%; max-width:' +
+      SIGNOVA_BANNER_MAX_WIDTH + 'px; height:auto; display:block; border:0;" /></td></tr>';
+  }
+
+  if (!k.titel && !k.text) return "";
+
+  return '<tr><td style="padding-top:8px;"><table cellpadding="10" cellspacing="0" style="background:' +
+    farbe + '; border-radius:6px;"><tr><td style="color:#ffffff; font-family:Segoe UI, Arial, sans-serif; font-size:9.5pt;">' +
+    '<strong>' + (k.titel || "") + '</strong><br/>' + (k.text || "") + '</td></tr></table></td></tr>';
+}
+
 function signovaBuildHtml(tpl, profile, person, vorlagenName) {
   var farbe = tpl.farbe || "#1F3864";
   var titel = person && person.titel ? person.titel : "";
@@ -90,6 +155,19 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName) {
 
   var logo = signovaAbsoluteUrl(tpl.logo_url);
   var bannerBild = signovaAbsoluteUrl(tpl.banner_image_url);
+  var kampagne = signovaKampagnenBannerHtml(person, farbe);
+
+  /* HTML-Modus: Die Vorlage IST die Signatur - keine Felder, keine Fussnote.
+     Genauso verhaelt sich die Vorschau im Dashboard. Ein laufendes
+     Kampagnen-Banner wird darunter angehaengt, weil eine freie HTML-Vorlage
+     keinen definierten Banner-Platz hat. */
+  if (tpl.mode === "html") {
+    var eigen = signovaRenderHtmlTemplate(tpl.html_content, signovaHtmlKontext(tpl, profile, person));
+    if (!kampagne) return eigen;
+    return eigen +
+      '<table cellpadding="0" cellspacing="0" style="max-width:' + SIGNOVA_BANNER_MAX_WIDTH + 'px;">' +
+      kampagne + '</table>';
+  }
 
   var html =
     '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222;">';
@@ -111,9 +189,12 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName) {
     '<br/>E-Mail: <a href="mailto:' + profile.emailAddress + '" style="color:' + farbe + ';">' + profile.emailAddress + '</a>' +
     (tpl.webseite ? ' · ' + tpl.webseite : '') +
     '</td></tr>';
-  /* Banner-Auswahl - identisch zu buildBanner() in signova-app/src/lib/signature.ts:
+  /* Banner-Rangfolge: laufende Kampagne schlaegt das Vorlagen-Banner.
+     Ohne Kampagne gilt buildBanner() aus signova-app/src/lib/signature.ts:
      Banner aus -> nichts; Bild gesetzt -> Bild; sonst Text-Box, sofern gefuellt. */
-  if (tpl.banner_aktiv && bannerBild) {
+  if (kampagne) {
+    html += kampagne;
+  } else if (tpl.banner_aktiv && bannerBild) {
     html += '<tr><td style="padding-top:8px;">' +
       '<img src="' + signovaAttr(bannerBild) + '" alt="" style="width:100%; max-width:' +
       SIGNOVA_BANNER_MAX_WIDTH + 'px; height:auto; display:block; border:0;" /></td></tr>';
