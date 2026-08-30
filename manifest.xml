@@ -6,9 +6,9 @@
   xsi:type="MailApp">
   <Id>7f2a9c40-3b1e-4d8a-9c6f-0a1b2c3d4e5f</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>SIGNOVA</ProviderName>
+  <ProviderName>SIGNIDENT</ProviderName>
   <DefaultLocale>de-DE</DefaultLocale>
-  <DisplayName DefaultValue="SIGNOVA Signature Spike"/>
+  <DisplayName DefaultValue="SIGNIDENT"/>
   <Description DefaultValue="Technik-Test: setzt automatisch eine zentrale Signatur beim Verfassen neuer E-Mails."/>
   <IconUrl DefaultValue="https://uvaree.github.io/signova-spike/assets/icon-64.png"/>
   <HighResolutionIconUrl DefaultValue="https://uvaree.github.io/signova-spike/assets/icon-128.png"/>
@@ -94,11 +94,11 @@
           <bt:Url id="Taskpane.Url" DefaultValue="https://uvaree.github.io/signova-spike/taskpane.html"/>
         </bt:Urls>
         <bt:ShortStrings>
-          <bt:String id="GroupLabel" DefaultValue="SIGNOVA"/>
-          <bt:String id="TaskpaneButton.Label" DefaultValue="SIGNOVA Info"/>
+          <bt:String id="GroupLabel" DefaultValue="SIGNIDENT"/>
+          <bt:String id="TaskpaneButton.Label" DefaultValue="SIGNIDENT Info"/>
         </bt:ShortStrings>
         <bt:LongStrings>
-          <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Zeigt Informationen zum SIGNOVA Signature Spike."/>
+          <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Zeigt Informationen zu SIGNIDENT."/>
         </bt:LongStrings>
       </Resources>
     </VersionOverrides>

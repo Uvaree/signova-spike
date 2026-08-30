@@ -1,9 +1,9 @@
-/* SIGNOVA Spike v0.4 – Mehrere Vorlagen (templates.json) + Zuweisung pro Person (users.json)
+/* SIGNIDENT Spike v0.4 – Mehrere Vorlagen (templates.json) + Zuweisung pro Person (users.json)
    Die Mini-"Rules Engine": users.json -> Feld 'vorlage' bestimmt die Vorlage; ohne Zuweisung gilt 'standard'. */
 
 var SIGNOVA_BASE = "https://signova-app-eta.vercel.app/api/addin/";
 
-/* Zugriffstoken fuer die SIGNOVA-API. Muss identisch mit der ENV-Variable
+/* Zugriffstoken fuer die SIGNIDENT-API. Muss identisch mit der ENV-Variable
    ADDIN_TOKEN im Vercel-Projekt sein, sonst antwortet die API mit 401.
    Hinweis: Das ist Basisschutz, keine Authentifizierung - das Token steht
    hier im Klartext. Vor dem Piloten mit echten Kanzleidaten wird es durch
@@ -11,9 +11,9 @@ var SIGNOVA_BASE = "https://signova-app-eta.vercel.app/api/addin/";
 var SIGNOVA_TOKEN = "hkaVWOSgspki6qXdi2lVUqLtHb9cEzkJB6Tj8YVwtbY";
 
 function signovaFallbackTemplate() {
-  return { version: "fallback", firma: "SIGNOVA Pilot", farbe: "#1F3864", webseite: "",
+  return { version: "fallback", firma: "SIGNIDENT Pilot", farbe: "#1F3864", webseite: "",
            logo_url: "", banner_aktiv: false, banner_titel: "", banner_text: "",
-           banner_image_url: "", hinweis: "Zentral verwaltet mit SIGNOVA." };
+           banner_image_url: "", hinweis: "Zentral verwaltet mit SIGNIDENT." };
 }
 
 function signovaFetchJson(file, fallback, callback) {
@@ -26,7 +26,7 @@ function signovaFetchJson(file, fallback, callback) {
       /* 401 = Token fehlt oder ist falsch. Ohne diese Pruefung wuerde die
          Fehlerantwort als gueltiges JSON durchgehen und zu einer leeren
          Signatur fuehren statt zum Fallback. */
-      if (!r.ok) throw new Error("SIGNOVA API " + r.status);
+      if (!r.ok) throw new Error("SIGNIDENT API " + r.status);
       return r.json();
     })
     .then(function (data) { callback(data); })
@@ -55,7 +55,7 @@ var SIGNOVA_LOGO_MAX_HEIGHT = 40;
 var SIGNOVA_BANNER_MAX_WIDTH = 600;
 
 /* Outlook rendert nur absolute Bild-Adressen. Relative Angaben werden
-   deshalb gegen den Ursprung der SIGNOVA-API aufgeloest. */
+   deshalb gegen den Ursprung der SIGNIDENT-API aufgeloest. */
 function signovaAbsoluteUrl(url) {
   var wert = (url || "").trim();
   if (!wert) return "";
