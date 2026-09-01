@@ -44,9 +44,29 @@ function signovaFindUser(users, email) {
 }
 
 function signovaPickTemplate(templates, person) {
+  /* Testbenutzer bekommen den Entwurf ihrer eigenen Vorlage direkt in
+     users.json mitgeliefert. Die Auswahl trifft der Server - ein normaler
+     Benutzer bekommt dieses Feld nie zu sehen. */
+  if (person && person.vorlage_entwurf) return person.vorlage_entwurf;
+
   if (!templates || !templates.vorlagen) return null;
   var wunsch = person && person.vorlage ? person.vorlage : "standard";
   return templates.vorlagen[wunsch] || templates.vorlagen["standard"] || null;
+}
+
+/* Ist die gerade verwendete Vorlage ein unveroeffentlichter Entwurf? */
+function signovaIstEntwurf(person) {
+  return Boolean(person && person.vorlage_entwurf);
+}
+
+/* Sichtbare Kennzeichnung, damit ein Entwurf im Postausgang nicht mit dem
+   Live-Stand verwechselt wird. */
+function signovaEntwurfHinweisHtml() {
+  return '<tr><td style="padding-top:8px;">' +
+    '<span style="display:inline-block; padding:3px 8px; border-radius:4px; ' +
+    'background:#FEF3C7; color:#92400E; font-family:Segoe UI, Arial, sans-serif; ' +
+    'font-size:8pt; font-weight:600;">Entwurf – nur für Testbenutzer sichtbar</span>' +
+    '</td></tr>';
 }
 
 /* Masse, an die sich Add-in UND Dashboard-Vorschau halten muessen.
@@ -167,7 +187,9 @@ function signovaBuildShortHtml(tpl, profile, person) {
     (titel ? '<br/><span style="color:#595959;">' + titel + '</span>' : '') +
     (telzeile ? '<br/>' + telzeile : '') +
     '<br/>' + profile.emailAddress +
-    '</td></tr></table>';
+    '</td></tr>' +
+    (signovaIstEntwurf(person) ? signovaEntwurfHinweisHtml() : '') +
+    '</table>';
 }
 
 /* Gilt fuer diesen Verfassen-Typ die Kurzform?
@@ -265,10 +287,11 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
      keinen definierten Banner-Platz hat. */
   if (tpl.mode === "html") {
     var eigen = signovaRenderHtmlTemplate(tpl.html_content, signovaHtmlKontext(tpl, profile, person));
-    if (!kampagne) return eigen;
+    var anhang = kampagne + (signovaIstEntwurf(person) ? signovaEntwurfHinweisHtml() : '');
+    if (!anhang) return eigen;
     return eigen +
       '<table cellpadding="0" cellspacing="0" style="max-width:' + SIGNOVA_BANNER_MAX_WIDTH + 'px;">' +
-      kampagne + '</table>';
+      anhang + '</table>';
   }
 
   var html =
@@ -307,7 +330,9 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
   }
   html += '<tr><td style="padding-top:8px; font-size:8pt; color:#8A8A8A;">' + (tpl.hinweis || "") +
     ' &nbsp;(' + (vorlagenName ? 'Vorlage: ' + vorlagenName + ' – ' : '') + (tpl.version || "?") +
-    (person ? ' · Personendaten: zentral' : ' · Personendaten: nicht gefunden') + ')</td></tr></table>';
+    (person ? ' · Personendaten: zentral' : ' · Personendaten: nicht gefunden') + ')</td></tr>' +
+    (signovaIstEntwurf(person) ? signovaEntwurfHinweisHtml() : '') +
+    '</table>';
   return html;
 }
 
@@ -326,7 +351,13 @@ function signovaApply(done, modus) {
           { coercionType: Office.CoercionType.Html },
           function (res) {
             if (res && res.status === Office.AsyncResultStatus.Succeeded) {
-              signovaPing(profile, tpl, name, modus === "button" ? "button" : "auto");
+              /* Ein Entwurf ist kein veroeffentlichter Stand - die Version
+                 bekommt deshalb einen Zusatz, sonst zaehlte die Verteilung ihn
+                 als "aktuell". */
+              var gemeldet = signovaIstEntwurf(person)
+                ? { version: (tpl.version || "") + " (Entwurf)" }
+                : tpl;
+              signovaPing(profile, gemeldet, name, modus === "button" ? "button" : "auto");
             }
             done(res);
           }
