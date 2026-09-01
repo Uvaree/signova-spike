@@ -16,6 +16,77 @@ var SIGNOVA_VERSION = "1.0.0";
    Zug oder Hotel-WLAN unbegrenzt und der Nutzer sieht nur "laedt". */
 var SIGNOVA_TIMEOUT_MS = 8000;
 
+/* ------------------------------------------------------------------
+   Nested App Authentication (NAA) - VORBEREITET, STANDARD AUS.
+
+   Solange SIGNOVA_NAA_ENABLED false ist, passiert hier nichts: Das Add-in
+   benutzt weiter das statische Token. Das ist Absicht - der laufende Betrieb
+   soll sich nicht aendern, bevor ein Tenant angebunden ist.
+
+   Zum Einschalten (Reihenfolge zwingend, siehe README "Microsoft 365
+   anbinden"):
+     1. In Entra eine App-Registrierung mit SPA-Redirect
+        brk-multihub://<domain> anlegen und eine Application-ID-URI vergeben.
+     2. ENTRA_ADDIN_AUDIENCE und ENTRA_ADDIN_AUTH_ENABLED in Vercel setzen.
+     3. msal-browser einbinden (Skript-Tag in taskpane.html und commands.html)
+        und SIGNOVA_MSAL_CLIENT_ID eintragen.
+     4. Erst dann SIGNOVA_NAA_ENABLED auf true.
+   ------------------------------------------------------------------ */
+var SIGNOVA_NAA_ENABLED = false;
+var SIGNOVA_MSAL_CLIENT_ID = "";
+/* Scope der eigenen API, z.B. "api://<application-id-uri>/Signatures.Read" */
+var SIGNOVA_NAA_SCOPE = "";
+
+var signovaMsalInstanz = null;
+
+/* Holt ein Entra-Token still im Hintergrund.
+   Gibt null zurueck, wenn NAA aus ist, msal fehlt oder etwas schiefgeht -
+   der Aufrufer faellt dann auf das statische Token zurueck. */
+function signovaHoleEntraToken(callback) {
+  if (!SIGNOVA_NAA_ENABLED || !SIGNOVA_MSAL_CLIENT_ID || !SIGNOVA_NAA_SCOPE) {
+    callback(null);
+    return;
+  }
+
+  /* msal-browser wird per Skript-Tag geladen. Fehlt es, ist das kein Fehler,
+     sondern schlicht "NAA nicht verfuegbar". */
+  if (typeof msal === "undefined" || !msal.createNestablePublicClientApplication) {
+    callback(null);
+    return;
+  }
+
+  try {
+    var weiter = function (instanz) {
+      signovaMsalInstanz = instanz;
+      instanz
+        .acquireTokenSilent({ scopes: [SIGNOVA_NAA_SCOPE] })
+        .then(function (ergebnis) {
+          callback((ergebnis && ergebnis.accessToken) || null);
+        })
+        .catch(function () {
+          /* Kein interaktiver Login an dieser Stelle: Der Handler laeuft beim
+             Verfassen einer Mail, ein Anmeldedialog waere dort unzumutbar.
+             Wir fallen still auf das statische Token zurueck. */
+          callback(null);
+        });
+    };
+
+    if (signovaMsalInstanz) {
+      weiter(signovaMsalInstanz);
+      return;
+    }
+
+    msal
+      .createNestablePublicClientApplication({
+        auth: { clientId: SIGNOVA_MSAL_CLIENT_ID }
+      })
+      .then(weiter)
+      .catch(function () { callback(null); });
+  } catch (e) {
+    callback(null);
+  }
+}
+
 var SIGNOVA_TOKEN = "hkaVWOSgspki6qXdi2lVUqLtHb9cEzkJB6Tj8YVwtbY";
 
 function signovaFallbackTemplate() {
@@ -47,10 +118,19 @@ function signovaFehlertext(ursache) {
 }
 
 function signovaFetchJson(file, fallback, callback) {
-  /* token = Zugriff, v = Cache-Buster (beides als Query-Parameter) */
+  signovaHoleEntraToken(function (entraToken) {
+    signovaFetchMitToken(file, entraToken || SIGNOVA_TOKEN, Boolean(entraToken), fallback, callback);
+  });
+}
+
+function signovaFetchMitToken(file, token, alsHeader, fallback, callback) {
+  /* Ein Entra-Token gehoert in den Authorization-Header, nicht in die URL:
+     Query-Parameter landen in Server- und Proxy-Logs. Das statische Token
+     bleibt aus Kompatibilitaetsgruenden im Query-Parameter. */
   var url = SIGNOVA_BASE + file +
-            "?token=" + encodeURIComponent(SIGNOVA_TOKEN) +
-            "&v=" + Date.now();
+            (alsHeader ? "?" : "?token=" + encodeURIComponent(token) + "&") +
+            "v=" + Date.now();
+  var optionen = alsHeader ? { headers: { Authorization: "Bearer " + token } } : undefined;
 
   /* Offline gar nicht erst versuchen - so kommt sofort eine verstaendliche
      Meldung statt eines Timeouts nach acht Sekunden. */
@@ -66,7 +146,7 @@ function signovaFetchJson(file, fallback, callback) {
     callback(fallback, "timeout");
   }, SIGNOVA_TIMEOUT_MS);
 
-  fetch(url)
+  fetch(url, optionen)
     .then(function (r) {
       /* 401 = Token fehlt oder ist falsch. Ohne diese Pruefung wuerde die
          Fehlerantwort als gueltiges JSON durchgehen und zu einer leeren
