@@ -10,7 +10,7 @@ var SIGNOVA_BASE = "https://signova-app-eta.vercel.app/api/addin/";
    Entra ID (Nested App Authentication) ersetzt. */
 /* Version des Add-ins. Wird in der Taskpane angezeigt und hilft beim
    Zuordnen von Fehlerberichten aus der Kanzlei. */
-var SIGNOVA_VERSION = "1.0.0";
+var SIGNOVA_VERSION = "1.2.0";
 
 /* Nach 8 Sekunden ohne Antwort abbrechen. Ohne Timeout haengt das Add-in im
    Zug oder Hotel-WLAN unbegrenzt und der Nutzer sieht nur "laedt". */
@@ -91,8 +91,8 @@ var SIGNOVA_TOKEN = "hkaVWOSgspki6qXdi2lVUqLtHb9cEzkJB6Tj8YVwtbY";
 
 function signovaFallbackTemplate() {
   return { version: "fallback", firma: "SIGNIDENT Pilot", farbe: "#1F3864", webseite: "",
-           logo_url: "", banner_aktiv: false, banner_titel: "", banner_text: "",
-           banner_image_url: "", hinweis: "Zentral verwaltet mit SIGNIDENT.",
+           schriftart: "", bloecke: [], logo_url: "", logo_alt: "", banner_aktiv: false, banner_titel: "", banner_text: "",
+           banner_image_url: "", banner_alt: "", hinweis: "Zentral verwaltet mit SIGNIDENT.",
            reply_mode: "short", short_html_content: "" };
 }
 
@@ -227,6 +227,29 @@ function signovaEntwurfHinweisHtml() {
 /* Masse, an die sich Add-in UND Dashboard-Vorschau halten muessen.
    Gegenstueck: LOGO_MAX_HEIGHT_PX / BANNER_MAX_WIDTH_PX in signova-app,
    src/lib/signature.ts */
+/* Schriftarten. Spiegel von signova-app/src/lib/schriftarten.ts - wer dort
+   etwas ergaenzt, muss es hier mitziehen, sonst faellt die betroffene
+   Vorlage im Add-in stillschweigend auf die Vorgabe zurueck.
+   Leere oder unbekannte Kennung = Vorgabe, damit bestehende Vorlagen
+   unveraendert aussehen. */
+var SIGNOVA_STANDARD_SCHRIFT = "'Segoe UI', Arial, sans-serif";
+var SIGNOVA_SCHRIFTEN = {
+  segoe:     "'Segoe UI', Arial, sans-serif",
+  arial:     "Arial, Helvetica, sans-serif",
+  helvetica: "Helvetica, Arial, sans-serif",
+  verdana:   "Verdana, Geneva, sans-serif",
+  tahoma:    "Tahoma, Geneva, sans-serif",
+  trebuchet: "'Trebuchet MS', Tahoma, sans-serif",
+  georgia:   "Georgia, 'Times New Roman', serif",
+  times:     "'Times New Roman', Times, serif",
+  garamond:  "Garamond, Georgia, 'Times New Roman', serif"
+};
+
+function signovaSchrift(tpl) {
+  var id = tpl && tpl.schriftart ? String(tpl.schriftart) : "";
+  return SIGNOVA_SCHRIFTEN[id] || SIGNOVA_STANDARD_SCHRIFT;
+}
+
 var SIGNOVA_LOGO_MAX_HEIGHT = 40;
 var SIGNOVA_BANNER_MAX_WIDTH = 600;
 
@@ -261,14 +284,64 @@ function signovaAttr(wert) {
 
    Erst die Bloecke aufloesen, dann die Platzhalter ersetzen - andersherum
    wuerde ein Wert, der zufaellig {{/if}} enthaelt, die Struktur zerstoeren. */
-function signovaRenderHtmlTemplate(html, kontext) {
-  var mitBloecken = String(html || "").replace(
-    /\{\{#if\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}([\s\S]*?)\{\{\/if\}\}/g,
-    function (treffer, feld, inhalt) {
-      var wert = kontext[feld];
-      return !wert || String(wert).trim() === "" ? "" : inhalt;
+/* Loest {{#if feld}}...{{/if}} auf - auch INEINANDER verschachtelt.
+
+   Spiegel von loeseBedingungen() in signova-app/src/lib/html-template.ts.
+   Der frueher hier stehende regulaere Ausdruck schloss beim ersten
+   {{/if}} und liess bei verschachtelten Bedingungen ein {{/if}} als Text
+   in der Signatur stehen. Der visuelle Baukasten erzeugt Verschachtelung
+   zwangslaeufig (bedingter Block mit Social-Links darin). */
+function signovaLoeseBedingungen(html, kontext) {
+  var OEFFNEN = /\{\{#if\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
+  var SCHLIESSEN = "{{/if}}";
+  var stapel = [{ feld: null, teile: [] }];
+  var position = 0;
+
+  function anhaengen(text) {
+    if (text) stapel[stapel.length - 1].teile.push(text);
+  }
+  function leer(wert) {
+    return !wert || String(wert).trim() === "";
+  }
+
+  while (position < html.length) {
+    OEFFNEN.lastIndex = position;
+    var auf = OEFFNEN.exec(html);
+    var zu = html.indexOf(SCHLIESSEN, position);
+    if (!auf && zu === -1) break;
+
+    var aufAn = auf ? auf.index : Number.MAX_SAFE_INTEGER;
+    var zuAn = zu === -1 ? Number.MAX_SAFE_INTEGER : zu;
+
+    if (aufAn < zuAn && auf) {
+      anhaengen(html.slice(position, auf.index));
+      stapel.push({ feld: auf[1], teile: [] });
+      position = auf.index + auf[0].length;
+      continue;
     }
-  );
+
+    anhaengen(html.slice(position, zuAn));
+    position = zuAn + SCHLIESSEN.length;
+    if (stapel.length === 1) continue;
+
+    var block = stapel.pop();
+    anhaengen(leer(kontext[block.feld]) ? "" : block.teile.join(""));
+  }
+
+  anhaengen(html.slice(position));
+
+  while (stapel.length > 1) {
+    var offen = stapel.pop();
+    stapel[stapel.length - 1].teile.push(
+      leer(kontext[offen.feld]) ? "" : offen.teile.join("")
+    );
+  }
+
+  return stapel[0].teile.join("");
+}
+
+function signovaRenderHtmlTemplate(html, kontext) {
+  var mitBloecken = signovaLoeseBedingungen(String(html || ""), kontext);
 
   return mitBloecken.replace(
     /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,
@@ -292,8 +365,197 @@ function signovaHtmlKontext(tpl, profile, person) {
     email: profile.emailAddress,
     firma: tpl.firma || "",
     webseite: tpl.webseite || "",
-    logo_url: signovaAbsoluteUrl(tpl.logo_url)
+    logo_url: signovaAbsoluteUrl(tpl.logo_url),
+    /* Spiegel von signova-app/src/lib/html-template.ts - dort ebenfalls
+       zuletzt in der Liste PLATZHALTER. */
+    farbe: tpl.farbe || ""
   };
+}
+
+/* ==================================================================
+   Visueller Baukasten
+
+   Spiegel von signova-app/src/lib/baukasten.ts. Wer dort einen
+   Blocktyp ergaenzt, muss ihn HIER mitziehen - sonst verschwindet der
+   Block in der echten Signatur stillschweigend, waehrend die Vorschau
+   im Dashboard ihn zeigt.
+
+   Ausgabe ist bewusst tabellenbasiert mit Inline-Stilen: Outlook auf
+   Windows rendert mit der Word-Engine, dort gibt es kein Flexbox, kein
+   Grid und keine externen Stilangaben.
+   ================================================================== */
+
+var SIGNOVA_AUSRICHTUNG = { links: "left", mitte: "center", rechts: "right" };
+
+function signovaBlockStil(stil, kontext) {
+  stil = stil || {};
+  var teile = [];
+  var oben = stil.abstandOben || 0;
+  var unten = stil.abstandUnten || 0;
+  if (oben || unten) teile.push("padding:" + oben + "px 0 " + unten + "px 0");
+
+  teile.push(
+    "font-family:" +
+      (stil.schriftart
+        ? SIGNOVA_SCHRIFTEN[stil.schriftart] || SIGNOVA_STANDARD_SCHRIFT
+        : kontext.schriftStack)
+  );
+  teile.push("font-size:" + (stil.groesse || 10.5) + "pt");
+  teile.push("color:" + (stil.farbe || "#333333"));
+  if (stil.fett) teile.push("font-weight:bold");
+  if (stil.kursiv) teile.push("font-style:italic");
+  if (stil.ausrichtung) teile.push("text-align:" + SIGNOVA_AUSRICHTUNG[stil.ausrichtung]);
+  teile.push("line-height:1.45");
+  return teile.join("; ");
+}
+
+/* Nur http(s) und mailto - verhindert javascript: in einer Signatur. */
+function signovaSichereUrl(roh) {
+  var wert = String(roh || "").trim();
+  if (!wert) return "";
+  if (/^(https?:|mailto:)/i.test(wert)) return wert;
+  if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(wert)) return "https://" + wert;
+  return "";
+}
+
+function signovaBlockZeile(block, kontext) {
+  var inhalt = signovaBlockInhalt(block, kontext);
+  if (!inhalt) return "";
+  return '<tr><td style="' + signovaBlockStil(block.stil, kontext) + '">' + inhalt + "</td></tr>";
+}
+
+function signovaBlockInhalt(block, kontext) {
+  var farbe = (block.stil && block.stil.farbe) || kontext.farbe;
+  var breite;
+
+  switch (block.typ) {
+    case "text":
+      return String(block.text || "").split("\n").join("<br/>");
+
+    case "platzhalter":
+      return block.feld ? "{{" + block.feld + "}}" : "";
+
+    case "bedingung": {
+      if (!block.wennFeld) return "";
+      var innen = (block.kinder || [])
+        .map(function (kind) { return signovaBlockZeile(kind, kontext); })
+        .filter(Boolean)
+        .join("");
+      if (!innen) return "";
+      return (
+        "{{#if " + block.wennFeld + "}}" +
+        '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;">' +
+        innen + "</table>{{/if}}"
+      );
+    }
+
+    case "bild": {
+      var url = signovaSichereUrl(block.url);
+      if (!url) return "";
+      breite = block.breite || 200;
+      return (
+        '<img src="' + signovaAttr(url) + '" alt="' + signovaAttr(block.alt || "") +
+        '" width="' + breite + '" style="display:block; border:0; width:' + breite +
+        'px; max-width:100%; height:auto;" />'
+      );
+    }
+
+    case "logo":
+      breite = block.breite || 160;
+      return (
+        '{{#if logo_url}}<img src="{{logo_url}}" alt="{{firma}}" width="' + breite +
+        '" style="display:block; border:0; width:' + breite +
+        'px; max-width:100%; height:auto;" />{{/if}}'
+      );
+
+    case "tabelle": {
+      var links = (block.links || []).map(function (k) { return signovaBlockZeile(k, kontext); }).join("");
+      var rechts = (block.rechts || []).map(function (k) { return signovaBlockZeile(k, kontext); }).join("");
+      if (!links && !rechts) return "";
+      return (
+        '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse; width:100%;"><tr>' +
+        '<td width="50%" valign="top" style="width:50%; vertical-align:top; padding-right:12px;">' +
+        '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;">' + links + "</table></td>" +
+        '<td width="50%" valign="top" style="width:50%; vertical-align:top;">' +
+        '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;">' + rechts + "</table></td>" +
+        "</tr></table>"
+      );
+    }
+
+    case "link": {
+      var ziel = signovaSichereUrl(block.url);
+      if (!ziel) return "";
+      var text = (block.beschriftung && block.beschriftung.trim()) || ziel;
+      return '<a href="' + signovaAttr(ziel) + '" style="color:' + farbe + '; text-decoration:underline;">' + text + "</a>";
+    }
+
+    case "social": {
+      var link = function (feld, name) {
+        return '<a href="{{' + feld + '}}" style="color:' + farbe + '; text-decoration:none;">' + name + "</a>";
+      };
+      var trenner = '<span style="color:#B5AFA6;"> · </span>';
+      return (
+        "{{#if linkedin_url}}" + link("linkedin_url", "LinkedIn") + "{{/if}}" +
+        "{{#if xing_url}}{{#if linkedin_url}}" + trenner + "{{/if}}" + link("xing_url", "XING") + "{{/if}}"
+      );
+    }
+
+    case "meeting": {
+      var beschriftung = (block.beschriftung && block.beschriftung.trim()) || "Termin vereinbaren";
+      return (
+        '{{#if meeting_url}}<a href="{{meeting_url}}" style="color:' + farbe +
+        '; text-decoration:underline;">' + beschriftung + "</a>{{/if}}"
+      );
+    }
+
+    case "qr": {
+      /* Die Adresse kommt fertig vom Server (users.json -> qr_url). Ein
+         data:-URI funktioniert in Outlook auf Windows nicht, und ein
+         fremder QR-Dienst wuerde melden, wer die Mail oeffnet. */
+      if (!kontext.qrUrl) return "";
+      breite = block.breite || 96;
+      return (
+        '<img src="' + signovaAttr(kontext.qrUrl) + '" alt="' +
+        signovaAttr(block.alt || "Kontaktdaten als QR-Code") + '" width="' + breite +
+        '" height="' + breite + '" style="display:block; border:0; width:' + breite +
+        "px; height:" + breite + 'px;" />'
+      );
+    }
+
+    case "trenner": {
+      var linienfarbe = (block.stil && block.stil.farbe) || "#E9E5E0";
+      return (
+        '<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse; width:100%;"><tr>' +
+        '<td style="height:1px; line-height:1px; font-size:0; background:' + linienfarbe + ';">&nbsp;</td>' +
+        "</tr></table>"
+      );
+    }
+
+    case "banner":
+      return "";
+
+    case "baustein":
+      return block.bausteinKey ? "{{baustein:" + block.bausteinKey + "}}" : "";
+
+    case "html":
+      return block.text || "";
+
+    default:
+      return "";
+  }
+}
+
+function signovaBaukastenHtml(bloecke, kontext) {
+  if (!bloecke || !bloecke.length) return "";
+  var zeilen = bloecke
+    .map(function (block) { return signovaBlockZeile(block, kontext); })
+    .filter(Boolean)
+    .join("");
+  if (!zeilen) return "";
+  return (
+    '<table cellpadding="0" cellspacing="0" border="0" role="presentation" ' +
+    'style="border-collapse:collapse; max-width:600px;">' + zeilen + "</table>"
+  );
 }
 
 /* Banner einer laufenden Kampagne. Hat Vorrang vor dem Banner der Vorlage -
@@ -306,7 +568,7 @@ function signovaKampagnenBannerHtml(person, farbe) {
   var bild = signovaAbsoluteUrl(k.image_url);
   if (bild) {
     return '<tr><td style="padding-top:8px;">' +
-      '<img src="' + signovaAttr(bild) + '" alt="" style="width:100%; max-width:' +
+      '<img src="' + signovaAttr(bild) + '" alt="' + signovaAttr(k.alt || "") + '" style="width:100%; max-width:' +
       SIGNOVA_BANNER_MAX_WIDTH + 'px; height:auto; display:block; border:0;" /></td></tr>';
   }
 
@@ -337,7 +599,7 @@ function signovaBuildShortHtml(tpl, profile, person) {
   var l = signovaBeschriftungen(person);
   if (telefon) telzeile += l.telefon + " " + telefon;
   if (mobil) telzeile += (telzeile ? " · " : "") + l.mobil + " " + mobil;
-  return '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222;">' +
+  return '<table cellpadding="0" cellspacing="0" style="font-family:' + signovaSchrift(tpl) + '; font-size:10pt; color:#222;">' +
     '<tr><td><strong style="color:' + farbe + ';">' + profile.displayName + '</strong>' +
     (titel ? '<br/><span style="color:#595959;">' + titel + '</span>' : '') +
     (telzeile ? '<br/>' + telzeile : '') +
@@ -437,6 +699,40 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
     return signovaBuildShortHtml(tpl, profile, person);
   }
 
+  /* Baukasten-Modus: Die Bloecke ergeben HTML MIT Platzhaltern, das
+     anschliessend durch dieselbe Maschine laeuft wie eine handgeschriebene
+     HTML-Vorlage. Kein zweiter Dialekt, keine zweite Maskierung.
+     Banner bzw. laufende Kampagne haengen darunter - genau wie im
+     HTML-Modus, wo es ebenfalls keinen festen Bannerplatz gibt. */
+  if (tpl.mode === "baukasten") {
+    var geruest = signovaBaukastenHtml(tpl.bloecke || [], {
+      farbe: farbe,
+      schriftStack: signovaSchrift(tpl),
+      qrUrl: person && person.qr_url ? person.qr_url : ""
+    });
+    var gebaut = signovaRenderHtmlTemplate(geruest, signovaHtmlKontext(tpl, profile, person));
+
+    var bannerZeile = kampagne;
+    if (!bannerZeile && tpl.banner_aktiv && bannerBild) {
+      bannerZeile = '<tr><td style="padding-top:12px;">' +
+        '<img src="' + signovaAttr(bannerBild) + '" alt="' + signovaAttr(tpl.banner_alt || "") +
+        '" style="width:100%; max-width:' + SIGNOVA_BANNER_MAX_WIDTH +
+        'px; height:auto; display:block; border:0;" /></td></tr>';
+    } else if (!bannerZeile && tpl.banner_aktiv && (tpl.banner_titel || tpl.banner_text)) {
+      bannerZeile = '<tr><td style="padding-top:12px;"><table cellpadding="10" cellspacing="0" style="background:' +
+        farbe + '; border-radius:4px;"><tr><td style="color:#ffffff; font-family:Segoe UI, Arial, sans-serif;">' +
+        (tpl.banner_titel ? '<strong style="font-size:10.5pt;">' + tpl.banner_titel + '</strong>' : '') +
+        (tpl.banner_text ? '<br/><span style="font-size:9.5pt;">' + tpl.banner_text + '</span>' : '') +
+        '</td></tr></table></td></tr>';
+    }
+
+    var anhangB = bannerZeile + (signovaIstEntwurf(person) ? signovaEntwurfHinweisHtml() : '');
+    if (!anhangB) return gebaut;
+    return gebaut +
+      '<table cellpadding="0" cellspacing="0" style="max-width:' + SIGNOVA_BANNER_MAX_WIDTH + 'px;">' +
+      anhangB + '</table>';
+  }
+
   /* HTML-Modus: Die Vorlage IST die Signatur - keine Felder, keine Fussnote.
      Genauso verhaelt sich die Vorschau im Dashboard. Ein laufendes
      Kampagnen-Banner wird darunter angehaengt, weil eine freie HTML-Vorlage
@@ -451,12 +747,12 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
   }
 
   var html =
-    '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222;">';
+    '<table cellpadding="0" cellspacing="0" style="font-family:' + signovaSchrift(tpl) + '; font-size:10pt; color:#222;">';
 
   /* Logo ueber dem Namen (Ausbaupaket 1) */
   if (logo) {
     html += '<tr><td style="padding-bottom:8px;">' +
-      '<img src="' + signovaAttr(logo) + '" alt="" style="max-height:' + SIGNOVA_LOGO_MAX_HEIGHT +
+      '<img src="' + signovaAttr(logo) + '" alt="' + signovaAttr(tpl.logo_alt || "") + '" style="max-height:' + SIGNOVA_LOGO_MAX_HEIGHT +
       'px; max-width:100%; display:block; border:0;" /></td></tr>';
   }
 
@@ -477,7 +773,7 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
     html += kampagne;
   } else if (tpl.banner_aktiv && bannerBild) {
     html += '<tr><td style="padding-top:8px;">' +
-      '<img src="' + signovaAttr(bannerBild) + '" alt="" style="width:100%; max-width:' +
+      '<img src="' + signovaAttr(bannerBild) + '" alt="' + signovaAttr(tpl.banner_alt || "") + '" style="width:100%; max-width:' +
       SIGNOVA_BANNER_MAX_WIDTH + 'px; height:auto; display:block; border:0;" /></td></tr>';
   } else if (tpl.banner_aktiv && (tpl.banner_titel || tpl.banner_text)) {
     html += '<tr><td style="padding-top:8px;"><table cellpadding="10" cellspacing="0" style="background:' + farbe +

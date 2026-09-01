@@ -7,45 +7,239 @@
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 <script src="launchevent.js"></script>
 <style>
-  body{font-family:'Segoe UI',Arial,sans-serif;margin:16px;color:#1c2430;font-size:13.5px}
-  h2{color:#132A4A;font-size:17px;letter-spacing:.5px;margin:0 0 4px}
-  .lead{color:#5a6b80;margin:0 0 16px}
-  .btn{display:block;width:100%;margin:0 0 8px;padding:11px;background:#2E6BD6;color:#fff;border:0;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
-  .btn:disabled{background:#9db6dd;cursor:default}
-  .btn.zweit{background:#fff;color:#132A4A;border:1px solid #dde4ec}
-  .btn.zweit:disabled{color:#9aa8ba;border-color:#eef1f5}
-  .status{margin:12px 0 0;padding:10px 12px;border-radius:6px;font-size:12.5px;line-height:1.5}
-  .status.laedt{background:#eef4fe;color:#1D4488}
-  .status.ok{background:#ecfdf5;color:#1e7a46}
-  .status.warn{background:#fffbeb;color:#92400e}
-  .status.err{background:#fef2f2;color:#b23b3b}
-  .muted{color:#5a6b80;font-size:12px;line-height:1.6;margin-top:14px;border-top:1px solid #dde4ec;padding-top:10px}
-  .fuss{margin-top:14px;color:#9aa8ba;font-size:11px}
-  .spinner{display:inline-block;width:10px;height:10px;margin-right:6px;border:2px solid #bcd0f0;border-top-color:#2E6BD6;border-radius:50%;animation:dreh .8s linear infinite;vertical-align:-1px}
-  @keyframes dreh{to{transform:rotate(360deg)}}
+/* ====================================================================
+   Gestaltung der Taskpane.
+
+   Dieselben Farben, Abstaende und Zustaende wie die Verwaltung
+   (signova-app/tailwind.config.ts) - aber von Hand geschrieben: Hier
+   gibt es keinen Build-Schritt, die Datei wird als statische Seite
+   ausgeliefert.
+
+   KEINE Webschrift. Die Taskpane laeuft in einem Fenster INNERHALB von
+   Outlook; eine nachzuladende Schrift waere ein zusaetzlicher externer
+   Aufruf aus dem Postfach der Kanzlei heraus und wuerde beim Oeffnen
+   sichtbar nachspringen. Segoe UI ist ohnehin die Schrift von Outlook.
+
+   Der Funktionsumbau folgt in Paket 10 - hier ist ausschliesslich die
+   Optik angefasst.
+   ==================================================================== */
+
+:root {
+  --navy: #132A4A;
+  --navy-300: #9CAFC9;
+  --akzent: #2E6BD6;
+  --akzent-700: #2456AD;
+  --akzent-50: #EFF5FE;
+
+  --sand-50: #FBFAF9;
+  --sand-100: #F5F3F0;
+  --sand-200: #E9E5E0;
+  --sand-300: #D9D4CD;
+  --sand-500: #8C867C;
+  --sand-600: #6B655C;
+  --sand-700: #514C45;
+
+  --erfolg-50: #F0F7F2;
+  --erfolg-700: #26663A;
+  --warnung-50: #FDF7EC;
+  --warnung-700: #8A5A14;
+  --gefahr-50: #FDF3F2;
+  --gefahr-700: #932923;
+
+  --flaeche: #FFFFFF;
+  --text: var(--navy);
+  --neben: var(--sand-600);
+  --linie: var(--sand-200);
+}
+
+/* Outlook hat einen dunklen Modus. Ohne das hier leuchtet die Taskpane
+   als weisses Rechteck in einem sonst dunklen Fenster. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --flaeche: #1B1A19;
+    --text: #F5F3F0;
+    --neben: #B5AFA6;
+    --linie: #3A3630;
+    --sand-50: #26231F;
+    --sand-100: #26231F;
+    --erfolg-50: #14261B;
+    --warnung-50: #2A2013;
+    --gefahr-50: #2B1614;
+    --akzent-50: #16233A;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', 'Segoe UI Variable', -apple-system, Arial, sans-serif;
+  margin: 0;
+  padding: 24px 16px;
+  background: var(--flaeche);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+.marke {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  color: var(--text);
+  margin: 0;
+}
+
+.lead {
+  color: var(--neben);
+  font-size: 13px;
+  margin: 8px 0 24px;
+}
+
+/* Knoepfe: 40 px hoch (8er-Raster), genau EINER traegt den Akzent. */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 40px;
+  margin: 0 0 8px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--akzent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 150ms cubic-bezier(0.32, 0.72, 0, 1),
+              transform 150ms cubic-bezier(0.32, 0.72, 0, 1),
+              opacity 150ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.btn:hover:not(:disabled) { background: var(--akzent-700); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+
+.btn.zweit {
+  background: var(--flaeche);
+  color: var(--text);
+  border: 1px solid var(--sand-300);
+}
+.btn.zweit:hover:not(:disabled) { background: var(--sand-50); }
+
+/* Fokus sichtbar - dieselbe Regel wie in der Verwaltung. */
+.btn:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--flaeche), 0 0 0 4px var(--akzent);
+}
+
+.status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.status .punkt {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+}
+.status.laedt  { background: var(--akzent-50);  color: var(--akzent-700); }
+.status.laedt .punkt  { background: var(--akzent); }
+.status.ok     { background: var(--erfolg-50);  color: var(--erfolg-700); }
+.status.ok .punkt     { background: #2F7D44; }
+.status.warn   { background: var(--warnung-50); color: var(--warnung-700); }
+.status.warn .punkt   { background: #A9701A; }
+.status.err    { background: var(--gefahr-50);  color: var(--gefahr-700); }
+.status.err .punkt    { background: #B4342C; }
+
+.hinweis {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--linie);
+  color: var(--neben);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.fuss {
+  margin-top: 16px;
+  color: var(--sand-500);
+  font-size: 11px;
+}
+
+.spinner {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border: 2px solid var(--sand-300);
+  border-top-color: var(--akzent);
+  border-radius: 50%;
+  animation: dreh 800ms linear infinite;
+}
+@keyframes dreh { to { transform: rotate(360deg); } }
+
+/* Wer im Betriebssystem weniger Bewegung eingestellt hat, bekommt keine. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.nur-vorlesen {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
 </style>
 </head>
 <body>
-  <h2>SIGNIDENT</h2>
-  <p class="lead">Die Vorlage kommt live aus deiner SIGNIDENT-Plattform. Ändere sie dort – und die Signatur ändert sich hier.</p>
+  <p class="marke">SIGNIDENT</p>
+  <p class="lead">
+    Die Vorlage kommt live aus Ihrer SIGNIDENT-Verwaltung. Wird sie dort geändert,
+    ändert sich die Signatur hier mit.
+  </p>
 
   <button class="btn" id="go" disabled>Signatur einfügen</button>
   <button class="btn zweit" id="refresh" disabled>Signatur aktualisieren</button>
 
-  <div id="status"></div>
+  <div id="status" role="status" aria-live="polite"></div>
 
-  <div class="muted">💡 Bei zentraler Verteilung über das Admin Center passiert das automatisch bei jeder neuen E-Mail – ganz ohne diese Knöpfe.</div>
-  <div class="fuss" id="fuss"></div>
+  <p class="hinweis">
+    Bei zentraler Verteilung über das Microsoft 365 Admin Center geschieht das
+    automatisch bei jeder neuen E-Mail – ganz ohne diese Knöpfe.
+  </p>
+  <p class="fuss" id="fuss"></p>
 
 <script>
   (function () {
     var btn, refresh, st, fuss;
 
     function zeige(art, text, mitSpinner) {
+      /* Der farbige Punkt ist kein Schmuck: Er macht den Zustand auch ohne
+         Farbwahrnehmung unterscheidbar - dieselbe Regel wie bei den
+         Etiketten in der Verwaltung. */
       st.innerHTML =
         '<div class="status ' + art + '">' +
-        (mitSpinner ? '<span class="spinner"></span>' : '') +
-        text +
+        (mitSpinner ? '<span class="spinner"></span>' : '<span class="punkt"></span>') +
+        '<span>' + text + '</span>' +
         '</div>';
     }
 
@@ -81,7 +275,7 @@
           return;
         }
 
-        zeige('ok', '<strong>✔ Signatur eingefügt</strong> – schau in deine E-Mail.');
+        zeige('ok', '<strong>Signatur eingefügt.</strong> Sie steht jetzt in Ihrer E-Mail.');
       }, 'button');
     }
 
@@ -107,8 +301,8 @@
         zeige('warn', signovaFehlertext('offline'));
       }
 
-      btn.onclick = function () { anwenden('Hole Vorlage aus SIGNIDENT …'); };
-      refresh.onclick = function () { anwenden('Aktualisiere Signatur …'); };
+      btn.onclick = function () { anwenden('Vorlage wird geholt …'); };
+      refresh.onclick = function () { anwenden('Signatur wird aktualisiert …'); };
     });
   })();
 </script>
