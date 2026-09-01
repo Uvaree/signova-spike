@@ -8,6 +8,14 @@ var SIGNOVA_BASE = "https://signova-app-eta.vercel.app/api/addin/";
    Hinweis: Das ist Basisschutz, keine Authentifizierung - das Token steht
    hier im Klartext. Vor dem Piloten mit echten Kanzleidaten wird es durch
    Entra ID (Nested App Authentication) ersetzt. */
+/* Version des Add-ins. Wird in der Taskpane angezeigt und hilft beim
+   Zuordnen von Fehlerberichten aus der Kanzlei. */
+var SIGNOVA_VERSION = "1.0.0";
+
+/* Nach 8 Sekunden ohne Antwort abbrechen. Ohne Timeout haengt das Add-in im
+   Zug oder Hotel-WLAN unbegrenzt und der Nutzer sieht nur "laedt". */
+var SIGNOVA_TIMEOUT_MS = 8000;
+
 var SIGNOVA_TOKEN = "hkaVWOSgspki6qXdi2lVUqLtHb9cEzkJB6Tj8YVwtbY";
 
 function signovaFallbackTemplate() {
@@ -17,21 +25,67 @@ function signovaFallbackTemplate() {
            reply_mode: "short", short_html_content: "" };
 }
 
+/* Uebersetzt eine technische Ursache in einen Satz, den ein Mensch versteht. */
+function signovaFehlertext(ursache) {
+  if (ursache === "timeout") {
+    return "Zeitueberschreitung: Die SIGNIDENT-Plattform hat nicht innerhalb von " +
+      (SIGNOVA_TIMEOUT_MS / 1000) + " Sekunden geantwortet. Bitte Netzwerkverbindung pruefen.";
+  }
+  if (ursache === "offline") {
+    return "Keine Netzwerkverbindung. Die Signatur kann erst gesetzt werden, wenn Sie wieder online sind.";
+  }
+  if (ursache === "401") {
+    return "Zugriff verweigert (401). Das Add-in-Token stimmt nicht mehr mit der Plattform ueberein - bitte die IT informieren.";
+  }
+  if (/^5\d\d$/.test(String(ursache))) {
+    return "Die SIGNIDENT-Plattform meldet einen Serverfehler (" + ursache + "). Bitte spaeter erneut versuchen.";
+  }
+  if (ursache) {
+    return "Die SIGNIDENT-Plattform hat mit Status " + ursache + " geantwortet.";
+  }
+  return "Die SIGNIDENT-Plattform ist nicht erreichbar.";
+}
+
 function signovaFetchJson(file, fallback, callback) {
   /* token = Zugriff, v = Cache-Buster (beides als Query-Parameter) */
   var url = SIGNOVA_BASE + file +
             "?token=" + encodeURIComponent(SIGNOVA_TOKEN) +
             "&v=" + Date.now();
+
+  /* Offline gar nicht erst versuchen - so kommt sofort eine verstaendliche
+     Meldung statt eines Timeouts nach acht Sekunden. */
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    callback(fallback, "offline");
+    return;
+  }
+
+  var erledigt = false;
+  var uhr = setTimeout(function () {
+    if (erledigt) return;
+    erledigt = true;
+    callback(fallback, "timeout");
+  }, SIGNOVA_TIMEOUT_MS);
+
   fetch(url)
     .then(function (r) {
       /* 401 = Token fehlt oder ist falsch. Ohne diese Pruefung wuerde die
          Fehlerantwort als gueltiges JSON durchgehen und zu einer leeren
          Signatur fuehren statt zum Fallback. */
-      if (!r.ok) throw new Error("SIGNIDENT API " + r.status);
+      if (!r.ok) throw new Error(String(r.status));
       return r.json();
     })
-    .then(function (data) { callback(data); })
-    .catch(function () { callback(fallback); });
+    .then(function (data) {
+      if (erledigt) return;
+      erledigt = true;
+      clearTimeout(uhr);
+      callback(data, null);
+    })
+    .catch(function (e) {
+      if (erledigt) return;
+      erledigt = true;
+      clearTimeout(uhr);
+      callback(fallback, (e && e.message) || "netzwerk");
+    });
 }
 
 function signovaFindUser(users, email) {
@@ -361,8 +415,12 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
 function signovaApply(done, modus) {
   var item = Office.context.mailbox.item;
   var profile = Office.context.mailbox.userProfile;
-  signovaFetchJson("templates.json", null, function (templates) {
-    signovaFetchJson("users.json", null, function (users) {
+  var ursache = null;
+
+  signovaFetchJson("templates.json", null, function (templates, fehlerT) {
+    if (fehlerT) ursache = fehlerT;
+    signovaFetchJson("users.json", null, function (users, fehlerU) {
+      if (fehlerU && !ursache) ursache = fehlerU;
       signovaComposeTyp(item, function (composeTyp) {
         var person = signovaFindUser(users, profile.emailAddress);
         var tpl = signovaPickTemplate(templates, person);
@@ -381,7 +439,9 @@ function signovaApply(done, modus) {
                 : tpl;
               signovaPing(profile, gemeldet, name, modus === "button" ? "button" : "auto");
             }
-            done(res);
+            /* Die Ursache wird mitgegeben, damit die Taskpane sagen kann, WARUM
+               die Notfall-Vorlage gegriffen hat, statt nur "erfolgreich". */
+            done(res, ursache);
           }
         );
       });

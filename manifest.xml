@@ -5,11 +5,11 @@
   xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
   xsi:type="MailApp">
   <Id>7f2a9c40-3b1e-4d8a-9c6f-0a1b2c3d4e5f</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.1.0</Version>
   <ProviderName>SIGNIDENT</ProviderName>
   <DefaultLocale>de-DE</DefaultLocale>
   <DisplayName DefaultValue="SIGNIDENT"/>
-  <Description DefaultValue="Technik-Test: setzt automatisch eine zentrale Signatur beim Verfassen neuer E-Mails."/>
+  <Description DefaultValue="Setzt beim Verfassen automatisch die zentral verwaltete E-Mail-Signatur. Tenant-native: SIGNIDENT verwaltet nur Vorlagen und Verzeichnisdaten und routet niemals E-Mails."/>
   <IconUrl DefaultValue="https://uvaree.github.io/signova-spike/assets/icon-64.png"/>
   <HighResolutionIconUrl DefaultValue="https://uvaree.github.io/signova-spike/assets/icon-128.png"/>
   <SupportUrl DefaultValue="https://uvaree.github.io/signova-spike/"/>
@@ -79,6 +79,49 @@
               <SourceLocation resid="WebViewRuntime.Url"/>
             </ExtensionPoint>
           </DesktopFormFactor>
+
+          <!--
+            Vorbereitet fuer den spaeteren iOS-/Android-Test.
+
+            Auf Mobilgeraeten gibt es KEIN OnNewMessageCompose: Outlook Mobile
+            unterstuetzt bislang keine Launch-Events. Es bleibt also beim
+            Knopf in der Taskpane - die Automatik greift nur am Desktop und im
+            Web. Genau deshalb steht hier nur die MessageComposeCommandSurface.
+
+            NOCH NICHT NUTZBAR: Die globalen <Requirements> oben verlangen
+            Mailbox 1.10. Outlook Mobile erfuellt das nicht, das Add-in laesst
+            sich dort also gar nicht erst installieren - dieser Block ist
+            derzeit reine Vorbereitung.
+
+            Fuer einen echten iOS-Test muesste die MinVersion auf 1.5 gesenkt
+            und im Code geprueft werden, ob setSignatureAsync (1.10) vorhanden
+            ist, bevor es aufgerufen wird. Das ist bewusst NICHT Teil dieses
+            Pakets, weil es das Verhalten am Desktop veraendern wuerde.
+          -->
+          <MobileFormFactor>
+            <ExtensionPoint xsi:type="MobileMessageComposeCommandSurface">
+              <Group id="mobileMsgComposeGroup">
+                <Label resid="GroupLabel"/>
+                <Control xsi:type="MobileButton" id="mobileMsgComposeButton">
+                  <Label resid="TaskpaneButton.Label"/>
+                  <Icon>
+                    <bt:Image size="25" scale="1" resid="Icon.16x16"/>
+                    <bt:Image size="32" scale="1" resid="Icon.32x32"/>
+                    <bt:Image size="48" scale="1" resid="Icon.80x80"/>
+                    <bt:Image size="25" scale="2" resid="Icon.16x16"/>
+                    <bt:Image size="32" scale="2" resid="Icon.32x32"/>
+                    <bt:Image size="48" scale="2" resid="Icon.80x80"/>
+                    <bt:Image size="25" scale="3" resid="Icon.16x16"/>
+                    <bt:Image size="32" scale="3" resid="Icon.32x32"/>
+                    <bt:Image size="48" scale="3" resid="Icon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </ExtensionPoint>
+          </MobileFormFactor>
         </Host>
       </Hosts>
       <Resources>

@@ -2,47 +2,115 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>SIGNIDENT</title>
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 <script src="launchevent.js"></script>
 <style>
   body{font-family:'Segoe UI',Arial,sans-serif;margin:16px;color:#1c2430;font-size:13.5px}
-  h2{color:#1F3864;font-size:17px;letter-spacing:.5px}
-  .btn{display:block;width:100%;margin:14px 0 10px;padding:11px;background:#2E6BD6;color:#fff;border:0;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
-  .btn:disabled{background:#9db6dd}
-  .ok{color:#1e7a46;font-weight:600}
-  .err{color:#b23b3b}
-  .muted{color:#5a6b80;font-size:12px;line-height:1.6;margin-top:12px;border-top:1px solid #dde4ec;padding-top:10px}
-  code{background:#eef1f5;padding:1px 5px;border-radius:3px;font-size:12px}
+  h2{color:#132A4A;font-size:17px;letter-spacing:.5px;margin:0 0 4px}
+  .lead{color:#5a6b80;margin:0 0 16px}
+  .btn{display:block;width:100%;margin:0 0 8px;padding:11px;background:#2E6BD6;color:#fff;border:0;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
+  .btn:disabled{background:#9db6dd;cursor:default}
+  .btn.zweit{background:#fff;color:#132A4A;border:1px solid #dde4ec}
+  .btn.zweit:disabled{color:#9aa8ba;border-color:#eef1f5}
+  .status{margin:12px 0 0;padding:10px 12px;border-radius:6px;font-size:12.5px;line-height:1.5}
+  .status.laedt{background:#eef4fe;color:#1D4488}
+  .status.ok{background:#ecfdf5;color:#1e7a46}
+  .status.warn{background:#fffbeb;color:#92400e}
+  .status.err{background:#fef2f2;color:#b23b3b}
+  .muted{color:#5a6b80;font-size:12px;line-height:1.6;margin-top:14px;border-top:1px solid #dde4ec;padding-top:10px}
+  .fuss{margin-top:14px;color:#9aa8ba;font-size:11px}
+  .spinner{display:inline-block;width:10px;height:10px;margin-right:6px;border:2px solid #bcd0f0;border-top-color:#2E6BD6;border-radius:50%;animation:dreh .8s linear infinite;vertical-align:-1px}
+  @keyframes dreh{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
   <h2>SIGNIDENT</h2>
-  <p>Die Vorlage kommt live aus deiner SIGNIDENT-Plattform. Ändere sie dort – und die Signatur ändert sich hier.</p>
-  <button class="btn" id="go" disabled>Signatur jetzt einfügen</button>
+  <p class="lead">Die Vorlage kommt live aus deiner SIGNIDENT-Plattform. Ändere sie dort – und die Signatur ändert sich hier.</p>
+
+  <button class="btn" id="go" disabled>Signatur einfügen</button>
+  <button class="btn zweit" id="refresh" disabled>Signatur aktualisieren</button>
+
   <div id="status"></div>
-  <div class="muted">💡 Bei zentraler Verteilung über das Admin Center passiert das automatisch bei jeder neuen E-Mail – ganz ohne diesen Knopf.</div>
+
+  <div class="muted">💡 Bei zentraler Verteilung über das Admin Center passiert das automatisch bei jeder neuen E-Mail – ganz ohne diese Knöpfe.</div>
+  <div class="fuss" id="fuss"></div>
+
 <script>
-  Office.onReady(function(info){
-    var btn = document.getElementById('go');
-    var st = document.getElementById('status');
-    if (Office.context.mailbox && Office.context.mailbox.item && Office.context.mailbox.item.body && Office.context.mailbox.item.body.setSignatureAsync) {
-      btn.disabled = false;
-    } else {
-      st.innerHTML = '<p class="err">Bitte zuerst eine <b>neue E-Mail</b> öffnen und SIGNIDENT dort im Schreibfenster starten.</p>';
+  (function () {
+    var btn, refresh, st, fuss;
+
+    function zeige(art, text, mitSpinner) {
+      st.innerHTML =
+        '<div class="status ' + art + '">' +
+        (mitSpinner ? '<span class="spinner"></span>' : '') +
+        text +
+        '</div>';
     }
-    btn.onclick = function(){
-      btn.disabled = true; st.textContent = 'Hole Vorlage aus SIGNIDENT …';
-      signovaApply(function(res){
-        btn.disabled = false;
-        if (res.status === Office.AsyncResultStatus.Succeeded) {
-          st.innerHTML = '<p class="ok">✔ Signatur eingefügt – schau in deine E-Mail!</p>';
-        } else {
-          st.innerHTML = '<p class="err">Fehler: ' + JSON.stringify(res.error) + '</p>';
+
+    function sperren(gesperrt) {
+      btn.disabled = gesperrt;
+      refresh.disabled = gesperrt;
+    }
+
+    /* Ein Weg für beide Knöpfe: "Einfügen" und "Aktualisieren" tun technisch
+       dasselbe – setSignatureAsync überschreibt eine vorhandene Signatur. Der
+       zweite Knopf existiert, weil das für Nutzer nicht offensichtlich ist. */
+    function anwenden(beschriftung) {
+      sperren(true);
+      zeige('laedt', beschriftung, true);
+
+      signovaApply(function (res, ursache) {
+        sperren(false);
+
+        if (!res || res.status !== Office.AsyncResultStatus.Succeeded) {
+          var detail = res && res.error && res.error.message ? res.error.message : 'Unbekannter Fehler.';
+          zeige('err', '<strong>Signatur konnte nicht gesetzt werden.</strong><br/>' + detail);
+          return;
         }
+
+        if (ursache) {
+          /* Erfolgreich gesetzt, aber mit der Notfall-Vorlage: Das muss man
+             sehen, sonst hält man eine veraltete Signatur für aktuell. */
+          zeige(
+            'warn',
+            '<strong>Signatur eingefügt – aber mit der Notfall-Vorlage.</strong><br/>' +
+              signovaFehlertext(ursache)
+          );
+          return;
+        }
+
+        zeige('ok', '<strong>✔ Signatur eingefügt</strong> – schau in deine E-Mail.');
       }, 'button');
-    };
-  });
+    }
+
+    Office.onReady(function () {
+      btn = document.getElementById('go');
+      refresh = document.getElementById('refresh');
+      st = document.getElementById('status');
+      fuss = document.getElementById('fuss');
+
+      fuss.textContent = 'SIGNIDENT Add-in ' + SIGNOVA_VERSION;
+
+      var item = Office.context.mailbox && Office.context.mailbox.item;
+      var kannSignatur = item && item.body && item.body.setSignatureAsync;
+
+      if (!kannSignatur) {
+        zeige('warn', 'Bitte zuerst eine <b>neue E-Mail</b> öffnen und SIGNIDENT dort im Schreibfenster starten.');
+        return;
+      }
+
+      sperren(false);
+
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        zeige('warn', signovaFehlertext('offline'));
+      }
+
+      btn.onclick = function () { anwenden('Hole Vorlage aus SIGNIDENT …'); };
+      refresh.onclick = function () { anwenden('Aktualisiere Signatur …'); };
+    });
+  })();
 </script>
 </body>
 </html>
