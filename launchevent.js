@@ -13,7 +13,8 @@ var SIGNOVA_TOKEN = "hkaVWOSgspki6qXdi2lVUqLtHb9cEzkJB6Tj8YVwtbY";
 function signovaFallbackTemplate() {
   return { version: "fallback", firma: "SIGNIDENT Pilot", farbe: "#1F3864", webseite: "",
            logo_url: "", banner_aktiv: false, banner_titel: "", banner_text: "",
-           banner_image_url: "", hinweis: "Zentral verwaltet mit SIGNIDENT." };
+           banner_image_url: "", hinweis: "Zentral verwaltet mit SIGNIDENT.",
+           reply_mode: "short", short_html_content: "" };
 }
 
 function signovaFetchJson(file, fallback, callback) {
@@ -141,7 +142,102 @@ function signovaKampagnenBannerHtml(person, farbe) {
     '<strong>' + (k.titel || "") + '</strong><br/>' + (k.text || "") + '</td></tr></table></td></tr>';
 }
 
-function signovaBuildHtml(tpl, profile, person, vorlagenName) {
+/* Kurzform fuer Antworten und Weiterleitungen.
+   Gegenstueck: buildShortSignature() in signident/src/lib/signature.ts.
+   Bewusst reduziert - kein Logo, kein Banner, keine Kampagne. */
+function signovaBuildShortHtml(tpl, profile, person) {
+  var farbe = tpl.farbe || "#1F3864";
+  var titel = person && person.titel ? person.titel : "";
+  var telefon = person && person.telefon ? person.telefon : "";
+  var mobil = person && person.mobil ? person.mobil : "";
+
+  /* Eigenes HTML fuer die Kurzform hat Vorrang - dieselbe
+     Platzhalter-Maschine wie im HTML-Modus, kein zweiter Dialekt. */
+  var eigen = tpl.short_html_content ? String(tpl.short_html_content).trim() : "";
+  if (eigen) {
+    return signovaRenderHtmlTemplate(eigen, signovaHtmlKontext(tpl, profile, person));
+  }
+
+  var telzeile = "";
+  if (telefon) telzeile += "Tel. " + telefon;
+  if (mobil) telzeile += (telzeile ? " \u00b7 " : "") + "Mobil " + mobil;
+
+  return '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222;">' +
+    '<tr><td><strong style="color:' + farbe + ';">' + profile.displayName + '</strong>' +
+    (titel ? '<br/><span style="color:#595959;">' + titel + '</span>' : '') +
+    (telzeile ? '<br/>' + telzeile : '') +
+    '<br/>' + profile.emailAddress +
+    '</td></tr></table>';
+}
+
+/* Gilt fuer diesen Verfassen-Typ die Kurzform?
+   Gegenstueck: verwendeKurzform() in signident/src/lib/signature.ts. */
+function signovaVerwendeKurzform(tpl, composeTyp) {
+  return composeTyp === "antwort" && tpl.reply_mode === "short";
+}
+
+/* Ermittelt, ob gerade eine neue Mail oder eine Antwort/Weiterleitung
+   verfasst wird. getComposeTypeAsync gibt es erst ab Mailbox 1.10 und nur
+   im Compose-Modus - faellt es aus, gilt "neu". Eine falsche Kurzform waere
+   schlimmer als eine volle Signatur an der falschen Stelle. */
+function signovaComposeTyp(item, callback) {
+  try {
+    if (!item || typeof item.getComposeTypeAsync !== "function") {
+      callback("neu");
+      return;
+    }
+    item.getComposeTypeAsync(function (res) {
+      if (res && res.status === Office.AsyncResultStatus.Succeeded && res.value) {
+        var typ = res.value.composeType;
+        callback(typ === "reply" || typ === "forward" ? "antwort" : "neu");
+      } else {
+        callback("neu");
+      }
+    });
+  } catch (e) {
+    callback("neu");
+  }
+}
+
+/* Telemetrie: meldet nach erfolgreichem Setzen, WER die Signatur mit WELCHEM
+   CLIENT und WELCHER VERSION bekommen hat. Fire-and-forget - die Antwort wird
+   nicht abgewartet und Fehler werden verschluckt. Ein Ausfall der Telemetrie
+   darf niemals eine Signatur verhindern. */
+function signovaClientKennung() {
+  var host = "Outlook";
+  var plattform = "";
+
+  /* Beide Zugriffe einzeln absichern: hostName liegt unter mailbox.diagnostics,
+     platform unter Office.context.diagnostics. Je nach Outlook-Version und
+     Requirement-Set kann das eine da sein und das andere fehlen. */
+  try {
+    host = Office.context.mailbox.diagnostics.hostName || host;
+  } catch (e) { /* Standardwert behalten */ }
+
+  try {
+    plattform = Office.context.diagnostics.platform || "";
+  } catch (e) { /* ohne Plattform weitermachen */ }
+
+  return plattform ? host + " / " + plattform : host;
+}
+
+function signovaPing(profile, tpl, vorlagenName, modus) {
+  try {
+    fetch(SIGNOVA_BASE + "ping?token=" + encodeURIComponent(SIGNOVA_TOKEN), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: profile.emailAddress,
+        client: signovaClientKennung(),
+        template_key: vorlagenName || "",
+        template_version: (tpl && tpl.version) || "",
+        mode: modus
+      })
+    })["catch"](function () { /* bewusst ignoriert */ });
+  } catch (e) { /* bewusst ignoriert */ }
+}
+
+function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
   var farbe = tpl.farbe || "#1F3864";
   var titel = person && person.titel ? person.titel : "";
   var abteilung = person && person.abteilung ? person.abteilung : "";
@@ -156,6 +252,12 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName) {
   var logo = signovaAbsoluteUrl(tpl.logo_url);
   var bannerBild = signovaAbsoluteUrl(tpl.banner_image_url);
   var kampagne = signovaKampagnenBannerHtml(person, farbe);
+
+  /* Antwort/Weiterleitung mit reply_mode 'short': Kurzform, sonst nichts.
+     Auch die Kampagne entfaellt hier bewusst. */
+  if (signovaVerwendeKurzform(tpl, composeTyp)) {
+    return signovaBuildShortHtml(tpl, profile, person);
+  }
 
   /* HTML-Modus: Die Vorlage IST die Signatur - keine Felder, keine Fussnote.
      Genauso verhaelt sich die Vorschau im Dashboard. Ein laufendes
@@ -209,27 +311,34 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName) {
   return html;
 }
 
-function signovaApply(done) {
+function signovaApply(done, modus) {
   var item = Office.context.mailbox.item;
   var profile = Office.context.mailbox.userProfile;
   signovaFetchJson("templates.json", null, function (templates) {
     signovaFetchJson("users.json", null, function (users) {
-      var person = signovaFindUser(users, profile.emailAddress);
-      var tpl = signovaPickTemplate(templates, person);
-      var name = person && person.vorlage ? person.vorlage : "standard";
-      if (!tpl) { tpl = signovaFallbackTemplate(); name = ""; }   /* Notfall: alte/keine templates.json */
-      item.body.setSignatureAsync(
-        signovaBuildHtml(tpl, profile, person, name),
-        { coercionType: Office.CoercionType.Html },
-        function (res) { done(res); }
-      );
+      signovaComposeTyp(item, function (composeTyp) {
+        var person = signovaFindUser(users, profile.emailAddress);
+        var tpl = signovaPickTemplate(templates, person);
+        var name = person && person.vorlage ? person.vorlage : "standard";
+        if (!tpl) { tpl = signovaFallbackTemplate(); name = ""; }   /* Notfall: alte/keine templates.json */
+        item.body.setSignatureAsync(
+          signovaBuildHtml(tpl, profile, person, name, composeTyp),
+          { coercionType: Office.CoercionType.Html },
+          function (res) {
+            if (res && res.status === Office.AsyncResultStatus.Succeeded) {
+              signovaPing(profile, tpl, name, modus === "button" ? "button" : "auto");
+            }
+            done(res);
+          }
+        );
+      });
     });
   });
 }
 
 /* Automatik: startet bei neuer Mail – erfordert Admin-Deployment (M365 Admin Center) */
 function onNewMessageComposeHandler(event) {
-  signovaApply(function () { event.completed(); });
+  signovaApply(function () { event.completed(); }, "auto");
 }
 
 if (typeof Office !== "undefined" && Office.actions) {
