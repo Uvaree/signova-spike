@@ -43,11 +43,32 @@ function signovaFindUser(users, email) {
   return null;
 }
 
+/* Beschriftungen je Sprache. Gegenstueck: BESCHRIFTUNGEN in
+   signova-app/src/lib/sprachen.ts - beide Seiten muessen gleich bleiben. */
+var SIGNOVA_BESCHRIFTUNGEN = {
+  de: { telefon: "Tel.", mobil: "Mobil", email: "E-Mail", vorlage: "Vorlage" },
+  en: { telefon: "Phone", mobil: "Mobile", email: "Email", vorlage: "Template" }
+};
+
+function signovaSprache(person) {
+  return person && person.sprache === "en" ? "en" : "de";
+}
+
+function signovaBeschriftungen(person) {
+  return SIGNOVA_BESCHRIFTUNGEN[signovaSprache(person)] || SIGNOVA_BESCHRIFTUNGEN.de;
+}
+
 function signovaPickTemplate(templates, person) {
   /* Testbenutzer bekommen den Entwurf ihrer eigenen Vorlage direkt in
      users.json mitgeliefert. Die Auswahl trifft der Server - ein normaler
      Benutzer bekommt dieses Feld nie zu sehen. */
   if (person && person.vorlage_entwurf) return person.vorlage_entwurf;
+
+  /* Ab Ausbaupaket 6 liefert der Server die effektive Vorlage fertig mit -
+     inklusive bereits ersetzter Textbausteine in der Sprache der Person.
+     Damit braucht das Add-in keine Baustein-Logik. Fehlt das Feld (aeltere
+     API), greift der bisherige Weg ueber templates.json. */
+  if (person && person.vorlage_aufgeloest) return person.vorlage_aufgeloest;
 
   if (!templates || !templates.vorlagen) return null;
   var wunsch = person && person.vorlage ? person.vorlage : "standard";
@@ -179,9 +200,9 @@ function signovaBuildShortHtml(tpl, profile, person) {
   }
 
   var telzeile = "";
-  if (telefon) telzeile += "Tel. " + telefon;
-  if (mobil) telzeile += (telzeile ? " \u00b7 " : "") + "Mobil " + mobil;
-
+  var l = signovaBeschriftungen(person);
+  if (telefon) telzeile += l.telefon + " " + telefon;
+  if (mobil) telzeile += (telzeile ? " · " : "") + l.mobil + " " + mobil;
   return '<table cellpadding="0" cellspacing="0" style="font-family:Segoe UI, Arial, sans-serif; font-size:10pt; color:#222;">' +
     '<tr><td><strong style="color:' + farbe + ';">' + profile.displayName + '</strong>' +
     (titel ? '<br/><span style="color:#595959;">' + titel + '</span>' : '') +
@@ -268,8 +289,9 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
 
   var firmenzeile = (abteilung ? abteilung + " – " : "") + (tpl.firma || "");
   var telzeile = "";
-  if (telefon) telzeile += "Tel. " + telefon;
-  if (mobil) telzeile += (telzeile ? " · " : "") + "Mobil " + mobil;
+  var l = signovaBeschriftungen(person);
+  if (telefon) telzeile += l.telefon + " " + telefon;
+  if (mobil) telzeile += (telzeile ? " · " : "") + l.mobil + " " + mobil;
 
   var logo = signovaAbsoluteUrl(tpl.logo_url);
   var bannerBild = signovaAbsoluteUrl(tpl.banner_image_url);
@@ -311,7 +333,7 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
     '<tr><td style="border-top:2px solid ' + farbe + '; padding-top:6px;">' +
     firmenzeile +
     (telzeile ? '<br/>' + telzeile : '') +
-    '<br/>E-Mail: <a href="mailto:' + profile.emailAddress + '" style="color:' + farbe + ';">' + profile.emailAddress + '</a>' +
+    '<br/>' + l.email + ': <a href="mailto:' + profile.emailAddress + '" style="color:' + farbe + ';">' + profile.emailAddress + '</a>' +
     (tpl.webseite ? ' · ' + tpl.webseite : '') +
     '</td></tr>';
   /* Banner-Rangfolge: laufende Kampagne schlaegt das Vorlagen-Banner.
@@ -329,7 +351,7 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
       '<strong>' + (tpl.banner_titel || "") + '</strong><br/>' + (tpl.banner_text || "") + '</td></tr></table></td></tr>';
   }
   html += '<tr><td style="padding-top:8px; font-size:8pt; color:#8A8A8A;">' + (tpl.hinweis || "") +
-    ' &nbsp;(' + (vorlagenName ? 'Vorlage: ' + vorlagenName + ' – ' : '') + (tpl.version || "?") +
+    ' &nbsp;(' + (vorlagenName ? l.vorlage + ': ' + vorlagenName + ' – ' : '') + (tpl.version || "?") +
     (person ? ' · Personendaten: zentral' : ' · Personendaten: nicht gefunden') + ')</td></tr>' +
     (signovaIstEntwurf(person) ? signovaEntwurfHinweisHtml() : '') +
     '</table>';
