@@ -19,9 +19,6 @@
    Outlook; eine nachzuladende Schrift waere ein zusaetzlicher externer
    Aufruf aus dem Postfach der Kanzlei heraus und wuerde beim Oeffnen
    sichtbar nachspringen. Segoe UI ist ohnehin die Schrift von Outlook.
-
-   Der Funktionsumbau folgt in Paket 10 - hier ist ausschliesslich die
-   Optik angefasst.
    ==================================================================== */
 
 :root {
@@ -62,6 +59,7 @@
     --linie: #3A3630;
     --sand-50: #26231F;
     --sand-100: #26231F;
+    --sand-200: #3A3630;
     --erfolg-50: #14261B;
     --warnung-50: #2A2013;
     --gefahr-50: #2B1614;
@@ -74,7 +72,7 @@
 body {
   font-family: 'Segoe UI', 'Segoe UI Variable', -apple-system, Arial, sans-serif;
   margin: 0;
-  padding: 24px 16px;
+  padding: 16px 14px 24px;
   background: var(--flaeche);
   color: var(--text);
   font-size: 14px;
@@ -83,67 +81,34 @@ body {
 }
 
 .marke {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.28em;
-  color: var(--text);
+  color: var(--neben);
   margin: 0;
+}
+
+h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 4px 0 0;
 }
 
 .lead {
   color: var(--neben);
-  font-size: 13px;
-  margin: 8px 0 24px;
+  font-size: 12px;
+  margin: 4px 0 12px;
 }
 
-/* Knoepfe: 40 px hoch (8er-Raster), genau EINER traegt den Akzent. */
-.btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  height: 40px;
-  margin: 0 0 8px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--akzent);
-  color: #fff;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 150ms cubic-bezier(0.32, 0.72, 0, 1),
-              transform 150ms cubic-bezier(0.32, 0.72, 0, 1),
-              opacity 150ms cubic-bezier(0.32, 0.72, 0, 1);
-}
-.btn:hover:not(:disabled) { background: var(--akzent-700); }
-.btn:active:not(:disabled) { transform: translateY(1px); }
-.btn:disabled { opacity: 0.45; cursor: default; }
-
-.btn.zweit {
-  background: var(--flaeche);
-  color: var(--text);
-  border: 1px solid var(--sand-300);
-}
-.btn.zweit:hover:not(:disabled) { background: var(--sand-50); }
-
-/* Fokus sichtbar - dieselbe Regel wie in der Verwaltung. */
-.btn:focus-visible,
-a:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--flaeche), 0 0 0 4px var(--akzent);
-}
-
+/* ------------------------------------------------------------ Status */
 .status {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin: 16px 0 0;
-  padding: 10px 12px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .status .punkt {
@@ -162,21 +127,6 @@ a:focus-visible {
 .status.err    { background: var(--gefahr-50);  color: var(--gefahr-700); }
 .status.err .punkt    { background: #B4342C; }
 
-.hinweis {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--linie);
-  color: var(--neben);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.fuss {
-  margin-top: 16px;
-  color: var(--sand-500);
-  font-size: 11px;
-}
-
 .spinner {
   flex: 0 0 auto;
   display: inline-block;
@@ -190,7 +140,125 @@ a:focus-visible {
 }
 @keyframes dreh { to { transform: rotate(360deg); } }
 
-/* Wer im Betriebssystem weniger Bewegung eingestellt hat, bekommt keine. */
+/* ------------------------------------------------------------ Karten */
+.karte {
+  border: 1px solid var(--linie);
+  border-radius: 8px;
+  padding: 10px;
+  margin: 0 0 10px;
+  background: var(--flaeche);
+}
+/* Die automatisch gewaehlte Signatur ist die Antwort auf die Frage, mit
+   der die meisten das Panel oeffnen. Sie steht oben UND traegt als
+   einzige den Akzentrahmen. */
+.karte.gewaehlt {
+  border-color: var(--akzent);
+  box-shadow: 0 0 0 1px var(--akzent);
+}
+
+.kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.titel { font-size: 13px; font-weight: 600; }
+
+.etikett {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--sand-100);
+  color: var(--sand-600);
+}
+.etikett.aktiv { background: var(--akzent-50); color: var(--akzent-700); }
+
+/* Vorschau: echtes Signatur-HTML in einem Rahmen. `zoom` verkleinert es
+   auf die Breite der Taskpane, ohne die Masse im HTML zu aendern - eine
+   skalierte Vorschau bleibt so eine Vorschau und kein zweites Layout. */
+.vorschau {
+  border: 1px solid var(--linie);
+  border-radius: 6px;
+  background: #FFFFFF;
+  color: #222222;
+  padding: 8px;
+  max-height: 190px;
+  overflow: auto;
+  zoom: 0.8;
+}
+.vorschau.leer {
+  border-style: dashed;
+  background: transparent;
+  color: var(--neben);
+  font-size: 12px;
+  text-align: center;
+  padding: 14px 8px;
+  zoom: 1;
+}
+
+/* ----------------------------------------------------------- Knoepfe */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  margin: 8px 0 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--akzent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 150ms cubic-bezier(0.32, 0.72, 0, 1),
+              transform 150ms cubic-bezier(0.32, 0.72, 0, 1),
+              opacity 150ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.btn:hover:not(:disabled) { background: var(--akzent-700); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+
+.btn.zweit {
+  background: var(--flaeche);
+  color: var(--text);
+  border: 1px solid var(--sand-300);
+}
+.btn.zweit:hover:not(:disabled) { background: var(--sand-50); }
+
+.btn:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--flaeche), 0 0 0 4px var(--akzent);
+}
+
+/* ------------------------------------------------------------- Fuss */
+.hinweis {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--linie);
+  color: var(--neben);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.hinweis a { color: var(--akzent); }
+
+.fuss {
+  margin-top: 10px;
+  color: var(--sand-500);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -212,25 +280,36 @@ a:focus-visible {
 </head>
 <body>
   <p class="marke">SIGNIDENT</p>
+  <h1>Ihre Signaturen – zentral verwaltet</h1>
   <p class="lead">
-    Die Vorlage kommt live aus Ihrer SIGNIDENT-Verwaltung. Wird sie dort geändert,
-    ändert sich die Signatur hier mit.
+    Gepflegt wird sie in Ihrer Kanzlei, nicht hier. Ändert sich dort etwas,
+    ändert sich Ihre Signatur mit.
   </p>
-
-  <button class="btn" id="go" disabled>Signatur einfügen</button>
-  <button class="btn zweit" id="refresh" disabled>Signatur aktualisieren</button>
 
   <div id="status" role="status" aria-live="polite"></div>
+  <div id="liste"></div>
+
+  <button class="btn zweit" id="neuladen" hidden>Neu laden</button>
 
   <p class="hinweis">
-    Bei zentraler Verteilung über das Microsoft 365 Admin Center geschieht das
-    automatisch bei jeder neuen E-Mail – ganz ohne diese Knöpfe.
+    Bei zentraler Verteilung setzt SIGNIDENT die Signatur bei jeder neuen
+    E-Mail automatisch – die Knöpfe hier brauchen Sie nur, wenn Sie eine
+    andere Variante wählen möchten.
+    <span id="kontakt-zeile"></span>
   </p>
-  <p class="fuss" id="fuss"></p>
+
+  <p class="fuss">
+    <span id="fuss-version"></span>
+    <span>Tenant-Native</span>
+  </p>
 
 <script>
   (function () {
-    var btn, refresh, st, fuss;
+    var st, liste, neuladen, fussVersion, kontaktZeile;
+    var daten = null;
+    var composeTyp = "neu";
+
+    /* ---------------------------------------------------------- Anzeige */
 
     function zeige(art, text, mitSpinner) {
       /* Der farbige Punkt ist kein Schmuck: Er macht den Zustand auch ohne
@@ -243,66 +322,244 @@ a:focus-visible {
         '</div>';
     }
 
-    function sperren(gesperrt) {
-      btn.disabled = gesperrt;
-      refresh.disabled = gesperrt;
+    /* "vor X Minuten" statt einer Uhrzeit: Die Frage im Panel lautet nicht
+       "wann?", sondern "ist das noch aktuell?". */
+    function alterText(geholtAm) {
+      var minuten = Math.floor((Date.now() - geholtAm) / 60000);
+      if (minuten < 1) return "gerade eben geladen";
+      if (minuten === 1) return "aktualisiert vor 1 Minute";
+      if (minuten < 60) return "aktualisiert vor " + minuten + " Minuten";
+      var stunden = Math.floor(minuten / 60);
+      return "aktualisiert vor " + stunden + (stunden === 1 ? " Stunde" : " Stunden");
     }
 
-    /* Ein Weg für beide Knöpfe: "Einfügen" und "Aktualisieren" tun technisch
-       dasselbe – setSignatureAsync überschreibt eine vorhandene Signatur. Der
-       zweite Knopf existiert, weil das für Nutzer nicht offensichtlich ist. */
-    function anwenden(beschriftung) {
+    function statusNachLaden(ursache) {
+      if (!daten) return;
+
+      if (ursache) {
+        /* Offline oder Server nicht erreichbar: Der zuletzt geladene Stand
+           gilt weiter - das muss dastehen, sonst haelt man eine alte
+           Signatur fuer die aktuelle. */
+        zeige(
+          "warn",
+          "<strong>Stand von vorhin.</strong> " +
+            signovaFehlertext(ursache) +
+            " Angezeigt wird der zuletzt geladene Stand (" + alterText(daten.geholtAm) + ")."
+        );
+        return;
+      }
+
+      if (!daten.person) {
+        zeige(
+          "warn",
+          "<strong>Ihre Adresse steht nicht im Verzeichnis.</strong> " +
+            "Es gilt die Standardvorlage ohne Ihre persönlichen Angaben."
+        );
+        return;
+      }
+
+      zeige("ok", "<strong>Aktuell.</strong> " + alterText(daten.geholtAm) + ".");
+    }
+
+    function etikett(eintrag) {
+      if (eintrag.art === "standard") return "Für Sie gewählt";
+      if (eintrag.art === "antwort") return "Antworten";
+      if (eintrag.art === "sprache") return "Sprache";
+      return "Freigegeben";
+    }
+
+    /* ------------------------------------------------------------ Liste */
+
+    function zeichneListe() {
+      liste.innerHTML = "";
+      var person = daten && daten.person;
+      var eintraege = (person && person.signaturen) || [];
+
+      if (eintraege.length === 0) {
+        liste.innerHTML =
+          '<div class="karte"><div class="vorschau leer">' +
+          "Für Sie ist derzeit keine Signatur hinterlegt." +
+          "</div></div>";
+        return;
+      }
+
+      var profile = Office.context.mailbox.userProfile;
+
+      eintraege.forEach(function (eintrag) {
+        var html = signovaHtmlFuerAuswahl(person, profile, eintrag, composeTyp);
+
+        var karte = document.createElement("div");
+        karte.className = "karte" + (eintrag.standard ? " gewaehlt" : "");
+
+        var kopf = document.createElement("div");
+        kopf.className = "kopf";
+
+        var titel = document.createElement("span");
+        titel.className = "titel";
+        titel.textContent = eintrag.bezeichnung;
+
+        var marke = document.createElement("span");
+        marke.className = "etikett" + (eintrag.standard ? " aktiv" : "");
+        marke.textContent = etikett(eintrag);
+
+        kopf.appendChild(titel);
+        kopf.appendChild(marke);
+        karte.appendChild(kopf);
+
+        var vorschau = document.createElement("div");
+        if (html) {
+          vorschau.className = "vorschau";
+          /* Das HTML stammt aus der eigenen Render-Funktion; Personendaten
+             werden dort maskiert. Der HTML-Modus einer Vorlage ist
+             ausdruecklich "eigener Code der Verwaltung" (README §4.3). */
+          vorschau.innerHTML = html;
+        } else {
+          vorschau.className = "vorschau leer";
+          vorschau.textContent = "Diese Variante setzt keine Signatur.";
+        }
+        karte.appendChild(vorschau);
+
+        var knopf = document.createElement("button");
+        knopf.className = "btn" + (eintrag.standard ? "" : " zweit");
+        knopf.textContent = "Diese Signatur verwenden";
+        knopf.onclick = function () { verwenden(eintrag); };
+        karte.appendChild(knopf);
+
+        liste.appendChild(karte);
+      });
+
+      /* Was in einer Antwort passiert, haengt an der Vorlage und ist ohne
+         Erklaerung nicht zu erraten. */
+      if (person && person.antwort_verhalten === "first_only") {
+        var hinweis = document.createElement("p");
+        hinweis.className = "hinweis";
+        hinweis.style.marginTop = "0";
+        hinweis.textContent =
+          "In Antworten und Weiterleitungen setzt Ihre Vorlage bewusst keine Signatur.";
+        liste.appendChild(hinweis);
+      }
+    }
+
+    function sperren(gesperrt) {
+      var knoepfe = document.querySelectorAll("button");
+      for (var i = 0; i < knoepfe.length; i++) knoepfe[i].disabled = gesperrt;
+    }
+
+    /* ---------------------------------------------------------- Aktionen */
+
+    function verwenden(eintrag) {
       sperren(true);
-      zeige('laedt', beschriftung, true);
+      zeige("laedt", "Signatur wird gesetzt …", true);
 
       signovaApply(function (res, ursache) {
         sperren(false);
 
         if (!res || res.status !== Office.AsyncResultStatus.Succeeded) {
-          var detail = res && res.error && res.error.message ? res.error.message : 'Unbekannter Fehler.';
-          zeige('err', '<strong>Signatur konnte nicht gesetzt werden.</strong><br/>' + detail);
+          var detail = res && res.error && res.error.message ? res.error.message : "Unbekannter Fehler.";
+          zeige("err", "<strong>Signatur konnte nicht gesetzt werden.</strong><br/>" + detail);
           return;
         }
 
         if (ursache) {
-          /* Erfolgreich gesetzt, aber mit der Notfall-Vorlage: Das muss man
-             sehen, sonst hält man eine veraltete Signatur für aktuell. */
           zeige(
-            'warn',
-            '<strong>Signatur eingefügt – aber mit der Notfall-Vorlage.</strong><br/>' +
+            "warn",
+            "<strong>Signatur gesetzt – aber mit einem alten Stand.</strong><br/>" +
               signovaFehlertext(ursache)
           );
           return;
         }
 
-        zeige('ok', '<strong>Signatur eingefügt.</strong> Sie steht jetzt in Ihrer E-Mail.');
-      }, 'button');
+        zeige(
+          "ok",
+          "<strong>" + eintrag.bezeichnung + " eingefügt.</strong> " +
+            "Eine vorher gesetzte Signatur wurde dabei ersetzt, nicht ergänzt."
+        );
+      }, "button", eintrag);
     }
 
-    Office.onReady(function () {
-      btn = document.getElementById('go');
-      refresh = document.getElementById('refresh');
-      st = document.getElementById('status');
-      fuss = document.getElementById('fuss');
+    function laden(erstesMal) {
+      sperren(true);
+      zeige("laedt", erstesMal ? "Ihre Signaturen werden geladen …" : "Wird neu geladen …", true);
 
-      fuss.textContent = 'SIGNIDENT Add-in ' + SIGNOVA_VERSION;
+      signovaLadeDaten(function (ergebnis) {
+        /* Bei einem Fehler zeigen wir den letzten guten Stand weiter, sagen
+           aber dazu, dass der Abruf gescheitert ist. Beides gehoert
+           zusammen: der Inhalt von vorhin und der Grund dafuer. */
+        daten = ergebnis.ursache && signovaZwischenspeicher
+          ? signovaZwischenspeicher
+          : ergebnis;
+
+        sperren(false);
+        statusNachLaden(ergebnis.ursache);
+        zeichneListe();
+        zeigeKontakt();
+      });
+    }
+
+    /* Adresse der Verwaltung kommt aus users.json (ENV auf dem Server).
+       Ohne Adresse gibt es keinen Link - lieber nichts als ein Verweis ins
+       Leere. */
+    function zeigeKontakt() {
+      var adresse = daten && daten.users && daten.users.admin_kontakt;
+      if (!adresse) {
+        kontaktZeile.textContent = "";
+        return;
+      }
+
+      var betreff = "Signatur-Daten korrigieren";
+      var koerper =
+        "Meine Angaben in der Signatur stimmen nicht:\n\n" +
+        "Adresse: " + Office.context.mailbox.userProfile.emailAddress + "\n" +
+        "Falsch ist: \n" +
+        "Richtig wäre: \n";
+
+      var link = document.createElement("a");
+      link.href =
+        "mailto:" + adresse +
+        "?subject=" + encodeURIComponent(betreff) +
+        "&body=" + encodeURIComponent(koerper);
+      link.textContent = "Ihre Daten stimmen nicht?";
+
+      kontaktZeile.textContent = "";
+      kontaktZeile.appendChild(document.createElement("br"));
+      kontaktZeile.appendChild(link);
+    }
+
+    /* ------------------------------------------------------------ Start */
+
+    Office.onReady(function () {
+      st = document.getElementById("status");
+      liste = document.getElementById("liste");
+      neuladen = document.getElementById("neuladen");
+      fussVersion = document.getElementById("fuss-version");
+      kontaktZeile = document.getElementById("kontakt-zeile");
+
+      fussVersion.textContent = "Add-in " + SIGNOVA_VERSION;
 
       var item = Office.context.mailbox && Office.context.mailbox.item;
       var kannSignatur = item && item.body && item.body.setSignatureAsync;
 
       if (!kannSignatur) {
-        zeige('warn', 'Bitte zuerst eine <b>neue E-Mail</b> öffnen und SIGNIDENT dort im Schreibfenster starten.');
+        zeige(
+          "warn",
+          "Bitte zuerst eine <b>neue E-Mail</b> öffnen und SIGNIDENT dort im Schreibfenster starten."
+        );
         return;
       }
 
-      sperren(false);
+      neuladen.hidden = false;
+      neuladen.onclick = function () { laden(false); };
 
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        zeige('warn', signovaFehlertext('offline'));
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        zeige("warn", signovaFehlertext("offline"));
       }
 
-      btn.onclick = function () { anwenden('Vorlage wird geholt …'); };
-      refresh.onclick = function () { anwenden('Signatur wird aktualisiert …'); };
+      /* Der Verfassen-Typ bestimmt, was die Vorschau zeigt: In einer Antwort
+         ist die Kurzform der ehrliche Stand, nicht die volle Signatur. */
+      signovaComposeTyp(item, function (typ) {
+        composeTyp = typ;
+        laden(true);
+      });
     });
   })();
 </script>
