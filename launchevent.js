@@ -1,5 +1,13 @@
-/* SIGNIDENT Spike v0.4 – Mehrere Vorlagen (templates.json) + Zuweisung pro Person (users.json)
-   Die Mini-"Rules Engine": users.json -> Feld 'vorlage' bestimmt die Vorlage; ohne Zuweisung gilt 'standard'. */
+/* SIGNIDENT Spike v0.5 – Vorlagen (templates.json), Zuweisung pro Person
+   (users.json), Empfaenger-Regeln und Signatur-Panel.
+
+   Arbeitsteilung mit dem Server (Paket 10):
+     - WER welche Vorlage bekommt, entscheidet der Server. Das Add-in kennt
+       keine Verzeichnisdaten und keine Regelbedingungen.
+     - AN WEN die Mail geht, entscheidet das Add-in. Der Server sieht die
+       Empfaenger nie - deshalb liefert er in `empfaenger_regeln` nur die
+       Empfaenger-Seite der Regeln mit, die fuer diese Person ueberhaupt in
+       Frage kommen. */
 
 var SIGNOVA_BASE = "https://signova-app-eta.vercel.app/api/addin/";
 
@@ -10,7 +18,7 @@ var SIGNOVA_BASE = "https://signova-app-eta.vercel.app/api/addin/";
    Entra ID (Nested App Authentication) ersetzt. */
 /* Version des Add-ins. Wird in der Taskpane angezeigt und hilft beim
    Zuordnen von Fehlerberichten aus der Kanzlei. */
-var SIGNOVA_VERSION = "1.2.0";
+var SIGNOVA_VERSION = "1.3.0";
 
 /* Nach 8 Sekunden ohne Antwort abbrechen. Ohne Timeout haengt das Add-in im
    Zug oder Hotel-WLAN unbegrenzt und der Nutzer sieht nur "laedt". */
@@ -207,6 +215,39 @@ function signovaPickTemplate(templates, person) {
   if (!templates || !templates.vorlagen) return null;
   var wunsch = person && person.vorlage ? person.vorlage : "standard";
   return templates.vorlagen[wunsch] || templates.vorlagen["standard"] || null;
+}
+
+/* Kennzeichnung der eigenen Signatur.
+
+   setSignatureAsync ERSETZT den Signaturbereich des Entwurfs - eine zweite
+   Signatur kann dadurch gar nicht entstehen, egal wie oft gesetzt wird. Die
+   Marke dient deshalb nicht dem Ersetzen selbst, sondern dem Wiedererkennen:
+   Das Panel kann damit sagen, ob im Entwurf bereits eine SIGNIDENT-Signatur
+   steht, und ein Blick in den Quelltext einer Mail zeigt, aus welcher
+   Add-in-Version sie stammt. */
+var SIGNOVA_MARKE = "signident-signatur";
+
+function signovaMarkiere(html) {
+  if (!html) return "";
+  return '<div id="' + SIGNOVA_MARKE + '" data-signident="' + SIGNOVA_VERSION + '">' +
+    html + '</div>';
+}
+
+/* Steht im Entwurf schon eine Signatur von uns? Rein zur Anzeige - fuer das
+   Setzen selbst ist die Antwort ohne Belang (siehe oben). */
+function signovaHatEigeneSignatur(item, callback) {
+  try {
+    if (!item || !item.body || typeof item.body.getAsync !== "function") {
+      callback(false);
+      return;
+    }
+    item.body.getAsync(Office.CoercionType.Html, function (res) {
+      var html = res && res.status === Office.AsyncResultStatus.Succeeded ? res.value : "";
+      callback(String(html || "").indexOf(SIGNOVA_MARKE) >= 0);
+    });
+  } catch (e) {
+    callback(false);
+  }
 }
 
 /* Ist die gerade verwendete Vorlage ein unveroeffentlichter Entwurf? */
@@ -609,10 +650,154 @@ function signovaBuildShortHtml(tpl, profile, person) {
     '</table>';
 }
 
+/* ==================================================================
+   Empfaenger-Regeln - CLIENTSEITIG.
+
+   Spiegel von pruefeEmpfaenger() in signova-app/src/lib/rules.ts. Beide
+   Seiten muessen dieselbe Antwort geben, sonst zeigt der Signaturtester in
+   der Verwaltung etwas anderes als Outlook.
+
+   Der Server hat bereits entschieden, welche Regeln fuer DIESE PERSON
+   ueberhaupt in Frage kommen; hier steht nur noch die Empfaenger-Seite.
+   ================================================================== */
+
+function signovaDomainVon(adresse) {
+  var teile = String(adresse || "").trim().toLowerCase().split("@");
+  return teile.length > 1 ? teile.pop() : "";
+}
+
+/* '*' steht fuer beliebig viele Zeichen. Enthaelt das Muster ein '@', wird
+   die ganze Adresse verglichen statt nur der Domain. */
+function signovaPasstMuster(adresse, muster) {
+  var wert = String(muster || "").trim().toLowerCase();
+  if (!wert) return false;
+
+  var ziel = wert.indexOf("@") >= 0
+    ? String(adresse || "").trim().toLowerCase()
+    : signovaDomainVon(adresse);
+  if (!ziel) return false;
+
+  /* Alles maskieren, was in einem regulaeren Ausdruck Bedeutung hat - nur der
+     Stern bleibt als Platzhalter uebrig. Spiegel von passtDomainMuster(). */
+  var regex = wert.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*");
+  try {
+    return new RegExp("^" + regex + "$").test(ziel);
+  } catch (e) {
+    return false;
+  }
+}
+
+function signovaTrifftEinMuster(adressen, muster) {
+  for (var i = 0; i < adressen.length; i++) {
+    for (var j = 0; j < muster.length; j++) {
+      if (signovaPasstMuster(adressen[i], muster[j])) return adressen[i];
+    }
+  }
+  return null;
+}
+
+function signovaEmpfaengerTrifft(regel, adressen, eigeneDomain) {
+  var ein = regel.einschluss || [];
+  var aus = regel.ausschluss || [];
+  var modus = regel.modus || "alle";
+  var ohneBedingung = modus === "alle" && ein.length === 0 && aus.length === 0;
+
+  /* Ohne eingetragene Empfaenger kann nur eine Regel greifen, die gar nichts
+     ueber sie aussagt - genau so entscheidet auch der Server. */
+  if (adressen.length === 0) return ohneBedingung;
+
+  /* Ausschluss zuerst und ohne Gegenrede: Wer "nie an *.gov" einstellt,
+     meint eine harte Grenze, keine Stimme unter mehreren. */
+  if (aus.length && signovaTrifftEinMuster(adressen, aus)) return false;
+  if (ein.length && !signovaTrifftEinMuster(adressen, ein)) return false;
+
+  if (modus === "intern" || modus === "extern") {
+    var fremd = false;
+    for (var i = 0; i < adressen.length; i++) {
+      if (signovaDomainVon(adressen[i]) !== String(eigeneDomain || "").toLowerCase()) {
+        fremd = true;
+        break;
+      }
+    }
+    return modus === "intern" ? !fremd : fremd;
+  }
+
+  return true;
+}
+
+/* Welche Vorlage gilt bei DIESEN Empfaengern?
+   null = keine Empfaenger-Regel greift; dann bleibt es bei der Vorlage, die
+   der Server ohnehin ausgeliefert hat. */
+function signovaVorlageNachEmpfaengern(person, adressen) {
+  var regeln = person && person.empfaenger_regeln;
+  if (!regeln || !regeln.length || !person.vorlagen) return null;
+
+  var treffer = null;
+  for (var i = 0; i < regeln.length; i++) {
+    if (!signovaEmpfaengerTrifft(regeln[i], adressen, person.absender_domain)) continue;
+    treffer = regeln[i];
+    /* "Nach Treffer stoppen" ist die Vorgabe; ohne sie darf eine spaetere
+       Regel ueberschreiben - dieselbe Logik wie werteRegelnAus(). */
+    if (treffer.stopp) break;
+  }
+
+  if (!treffer) return null;
+  var tpl = person.vorlagen[treffer.vorlage_id];
+  return tpl ? { tpl: tpl, name: treffer.template_key } : null;
+}
+
+/* Liest An und Cc aus dem Entwurf. Im Lesemodus gibt es diese Objekte nicht -
+   dann bleibt die Liste leer und es gilt die Vorlage des Servers. */
+function signovaEmpfaenger(item, callback) {
+  var adressen = [];
+
+  function adressenAus(res) {
+    if (!res || res.status !== Office.AsyncResultStatus.Succeeded || !res.value) return;
+    for (var i = 0; i < res.value.length; i++) {
+      var eintrag = res.value[i];
+      if (eintrag && eintrag.emailAddress) adressen.push(eintrag.emailAddress);
+    }
+  }
+
+  try {
+    if (!item || !item.to || typeof item.to.getAsync !== "function") {
+      callback([]);
+      return;
+    }
+
+    item.to.getAsync(function (res) {
+      adressenAus(res);
+      if (item.cc && typeof item.cc.getAsync === "function") {
+        item.cc.getAsync(function (res2) {
+          adressenAus(res2);
+          callback(adressen);
+        });
+      } else {
+        callback(adressen);
+      }
+    });
+  } catch (e) {
+    callback([]);
+  }
+}
+
 /* Gilt fuer diesen Verfassen-Typ die Kurzform?
    Gegenstueck: verwendeKurzform() in signident/src/lib/signature.ts. */
 function signovaVerwendeKurzform(tpl, composeTyp) {
   return composeTyp === "antwort" && tpl.reply_mode === "short";
+}
+
+/* Gar keine Signatur?
+
+   reply_mode 'first_only' heisst "nur in der ersten Mail eines Verlaufs".
+   Erkannt wird das allein am Compose-Typ: Outlook meldet reply/forward,
+   sobald eine Nachricht aus einer anderen heraus entsteht. Ein echtes "ist
+   das der erste Beitrag dieses Threads?" gaebe es nur, indem das Add-in das
+   Postfach durchsieht - genau das soll es nicht.
+
+   Gegenstueck: unterdrueckeSignatur() in signova-app/src/lib/signature.ts. */
+function signovaUnterdrueckt(tpl, composeTyp) {
+  return composeTyp === "antwort" && tpl && tpl.reply_mode === "first_only";
 }
 
 /* Ermittelt, ob gerade eine neue Mail oder eine Antwort/Weiterleitung
@@ -788,38 +973,137 @@ function signovaBuildHtml(tpl, profile, person, vorlagenName, composeTyp) {
   return html;
 }
 
-function signovaApply(done, modus) {
-  var item = Office.context.mailbox.item;
-  var profile = Office.context.mailbox.userProfile;
-  var ursache = null;
+/* ==================================================================
+   Daten holen und Signatur setzen
+   ================================================================== */
 
+/* Zwischenspeicher der letzten Antwort. Das Panel zeigt daraus "aktualisiert
+   vor X Minuten" und muss beim Umschalten zwischen Signaturen nicht jedes
+   Mal erneut laden. Der Handler beim Verfassen holt bewusst frisch: Dort
+   zaehlt der aktuelle Stand, nicht die Geschwindigkeit. */
+var signovaZwischenspeicher = null;
+
+function signovaLadeDaten(callback) {
+  var ursache = null;
   signovaFetchJson("templates.json", null, function (templates, fehlerT) {
     if (fehlerT) ursache = fehlerT;
     signovaFetchJson("users.json", null, function (users, fehlerU) {
       if (fehlerU && !ursache) ursache = fehlerU;
-      signovaComposeTyp(item, function (composeTyp) {
-        var person = signovaFindUser(users, profile.emailAddress);
-        var tpl = signovaPickTemplate(templates, person);
+
+      var daten = {
+        templates: templates,
+        users: users,
+        person: signovaFindUser(users, Office.context.mailbox.userProfile.emailAddress),
+        geholtAm: Date.now(),
+        ursache: ursache
+      };
+      /* Bei einem Fehler den letzten guten Stand behalten - eine kurz
+         gestoerte Verbindung soll das Panel nicht leerraeumen. */
+      if (!ursache || !signovaZwischenspeicher) signovaZwischenspeicher = daten;
+      callback(daten);
+    });
+  });
+}
+
+/* Baut das HTML fuer eine bestimmte Auswahl aus dem Panel.
+   `eintrag` ist ein Element aus person.signaturen; ohne Eintrag gilt die
+   automatisch bestimmte Vorlage. */
+function signovaHtmlFuerAuswahl(person, profile, eintrag, composeTyp) {
+  var tpl = person && person.vorlagen ? person.vorlagen[eintrag.vorlage_id] : null;
+  if (!tpl) return "";
+
+  /* Die Sprachvariante rendert dieselbe Vorlage mit den Beschriftungen der
+     anderen Sprache. Dafuer bekommt signovaBuildHtml eine Kopie der Person
+     mit geaenderter Sprache - keine zweite Renderfunktion. */
+  var wer = person;
+  if (eintrag.sprache && eintrag.sprache !== signovaSprache(person)) {
+    wer = {};
+    for (var k in person) if (Object.prototype.hasOwnProperty.call(person, k)) wer[k] = person[k];
+    wer.sprache = eintrag.sprache;
+  }
+
+  var typ = eintrag.art === "antwort" ? "antwort" : composeTyp;
+  if (signovaUnterdrueckt(tpl, typ)) return "";
+  return signovaBuildHtml(tpl, profile, wer, eintrag.vorlage_id, typ);
+}
+
+/**
+ * Setzt die Signatur im Entwurf.
+ *
+ * setSignatureAsync ERSETZT den Signaturbereich - deshalb kann weder ein
+ * zweiter Aufruf noch ein Empfaengerwechsel eine zweite Signatur erzeugen.
+ * Genau darauf beruht die Zusage "ersetzen, nie duplizieren"; das Anhaengen
+ * an den Nachrichtentext (setSelectedDataAsync) taete das Gegenteil und wird
+ * hier bewusst nicht benutzt.
+ *
+ * Leeres HTML ist ein gueltiger Fall (reply_mode 'first_only'): Es loescht
+ * eine zuvor gesetzte Signatur, statt sie stehen zu lassen.
+ */
+function signovaSetzeSignatur(item, html, callback) {
+  item.body.setSignatureAsync(
+    signovaMarkiere(html),
+    { coercionType: Office.CoercionType.Html },
+    callback
+  );
+}
+
+/**
+ * Bestimmt und setzt die Signatur.
+ *
+ * `auswahl` ist optional und kommt aus dem Panel ("Diese Signatur
+ * verwenden"). Ohne sie entscheiden Server-Vorlage und Empfaenger-Regeln.
+ */
+function signovaApply(done, modus, auswahl) {
+  var item = Office.context.mailbox.item;
+  var profile = Office.context.mailbox.userProfile;
+
+  signovaLadeDaten(function (daten) {
+    var person = daten.person;
+    var ursache = daten.ursache;
+
+    signovaComposeTyp(item, function (composeTyp) {
+      signovaEmpfaenger(item, function (adressen) {
+        var tpl = null;
         var name = person && person.vorlage ? person.vorlage : "standard";
-        if (!tpl) { tpl = signovaFallbackTemplate(); name = ""; }   /* Notfall: alte/keine templates.json */
-        item.body.setSignatureAsync(
-          signovaBuildHtml(tpl, profile, person, name, composeTyp),
-          { coercionType: Office.CoercionType.Html },
-          function (res) {
-            if (res && res.status === Office.AsyncResultStatus.Succeeded) {
-              /* Ein Entwurf ist kein veroeffentlichter Stand - die Version
-                 bekommt deshalb einen Zusatz, sonst zaehlte die Verteilung ihn
-                 als "aktuell". */
-              var gemeldet = signovaIstEntwurf(person)
-                ? { version: (tpl.version || "") + " (Entwurf)" }
-                : tpl;
-              signovaPing(profile, gemeldet, name, modus === "button" ? "button" : "auto");
-            }
-            /* Die Ursache wird mitgegeben, damit die Taskpane sagen kann, WARUM
-               die Notfall-Vorlage gegriffen hat, statt nur "erfolgreich". */
-            done(res, ursache);
+
+        if (auswahl) {
+          tpl = person && person.vorlagen ? person.vorlagen[auswahl.vorlage_id] : null;
+          name = auswahl.vorlage_id;
+        } else {
+          /* Empfaenger-Regeln zuerst: Sie sind die einzige Entscheidung, die
+             der Server nicht treffen konnte. Greift keine, bleibt es bei
+             seiner Vorlage. */
+          var nachEmpfaenger = signovaVorlageNachEmpfaengern(person, adressen);
+          if (nachEmpfaenger) {
+            tpl = nachEmpfaenger.tpl;
+            name = nachEmpfaenger.name;
+          } else {
+            tpl = signovaPickTemplate(daten.templates, person);
           }
-        );
+        }
+
+        if (!tpl) { tpl = signovaFallbackTemplate(); name = ""; }   /* Notfall: alte/keine templates.json */
+
+        var html = auswahl
+          ? signovaHtmlFuerAuswahl(person, profile, auswahl, composeTyp)
+          : (signovaUnterdrueckt(tpl, composeTyp)
+              ? ""
+              : signovaBuildHtml(tpl, profile, person, name, composeTyp));
+
+        signovaSetzeSignatur(item, html, function (res) {
+          if (res && res.status === Office.AsyncResultStatus.Succeeded) {
+            /* Ein Entwurf ist kein veroeffentlichter Stand - die Version
+               bekommt deshalb einen Zusatz, sonst zaehlte die Verteilung ihn
+               als "aktuell". */
+            var gemeldet = signovaIstEntwurf(person)
+              ? { version: (tpl.version || "") + " (Entwurf)" }
+              : tpl;
+            signovaPing(profile, gemeldet, name, modus === "button" ? "button" : "auto");
+          }
+          /* Die Ursache wird mitgegeben, damit die Taskpane sagen kann, WARUM
+             die Notfall-Vorlage gegriffen hat, statt nur "erfolgreich". */
+          done(res, ursache, { html: html, vorlage: name });
+        });
       });
     });
   });
@@ -830,6 +1114,32 @@ function onNewMessageComposeHandler(event) {
   signovaApply(function () { event.completed(); }, "auto");
 }
 
+/**
+ * Automatik: Die Empfaenger haben sich geaendert.
+ *
+ * Nur dann neu setzen, wenn fuer diese Person ueberhaupt eine Regel von den
+ * Empfaengern abhaengt. Sonst waere jedes Tippen im An-Feld ein Schreibzugriff
+ * auf den Entwurf - und wuerde eine im Panel getroffene Auswahl ueberschreiben,
+ * ohne dass sich am Ergebnis etwas aendert.
+ *
+ * Braucht Mailbox 1.13. Wo Outlook das Ereignis nicht kennt, passiert schlicht
+ * nichts; die Signatur bleibt die beim Oeffnen gesetzte.
+ */
+function onMessageRecipientsChangedHandler(event) {
+  var person = signovaZwischenspeicher && signovaZwischenspeicher.person;
+
+  if (person && (!person.empfaenger_regeln || !person.empfaenger_regeln.length)) {
+    event.completed();
+    return;
+  }
+
+  signovaApply(function () { event.completed(); }, "auto");
+}
+
 if (typeof Office !== "undefined" && Office.actions) {
   Office.actions.associate("onNewMessageComposeHandler", onNewMessageComposeHandler);
+  Office.actions.associate(
+    "onMessageRecipientsChangedHandler",
+    onMessageRecipientsChangedHandler
+  );
 }
